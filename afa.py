@@ -44,7 +44,7 @@ class LEDGER_CLASS(object):
 
 
 class Afa_Transactions(object):
-	def __init__(self, transaction, account_name, ledger, year=datetime.datetime.now().year):
+	def __init__(self, transaction, account_name, ledger, ledger_query, year=datetime.datetime.now().year):
 		self.transaction = transaction
 		self.account = self.calculate_account(ledger, account_name)
 		self.id = gen_id(transaction, account_name)
@@ -151,7 +151,7 @@ for L in LED:
 					if L.balance_account(i).amount > 0:
 						# and only if this does not already exists
 						if gen_id(L, acc.name) not in [t.id for t in TRANSACTIONS]:
-							TRANSACTIONS.append( Afa_Transactions(L, acc.name, LED, YEAR) )
+							TRANSACTIONS.append( Afa_Transactions(L, acc.name, LED, LEDGER, YEAR) )
 
 
 print LEDGER.query_to_double('ausgaben and not nicht')
