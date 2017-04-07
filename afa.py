@@ -9,12 +9,10 @@
 ###   afa-tax-reduction:Microphones  € 100,00
 ###   inventory:NTG3 microphone
 ###
-### Also the payee has to be the same for the very first transaction of the inventory
-###
 
 
 
-import sys, os, re, datetime, ledgerparse, ledger
+import sys, os, re, datetime, ledgerparse, ledger, tabulate
 
 
 
@@ -40,97 +38,17 @@ def gen_id(transaction, account_name):
 
 
 class LEDGER_CLASS(object):
-	def __init__(self, journal, afa_date, afa_account):
+	def __init__(self, journal):
 		self.journal = journal
-		self.afa_date = afa_date
-		self.afa_account = afa_account
 
- 		# items: [ id, payee, code, account, buy_date, buy_costs, costs_begin, costs_end ]
-		self.items = []
-		self.get_items()
-
-	def get_items(self, date=None, account=None):
-		# init out array
-		out = []
-
-		# use self.afa_date of object, if no date is given
-		if date == None:
-			date = self.afa_date
-
-		# use self.afa_account, if no account is given
-		if account == None:
-			account = self.afa_account
-
-		# get codes of transactions on the given day
-		# -> if they apply with afa_account
-		# -> and if they have a code
-		codes = []
-		accounts = {}
-		for post in self.journal.query('-p ' + date.strftime('%Y-%m-%d') + ' \"' + account + '\"' ):
-			# code?
-			if post.xact.code:
-				# append if it's not already in this array
-				if not post.xact.code in codes:
-					codes.append( post.xact.code )
-					accounts[post.xact.code] = ledger.Balance()
-				# amount of account where it comes from?
-				accounts[post.xact.code] += post.amount
-
-		# get buy date
-		buy_dates = []
-		for x in codes:
-			pass
-
-		return accounts
-
-	def gen_id(self, post):
-		# returns some kind of unique ID for a specific account and it's payee + code
-		# like "code-payee-account_name"
-		return post.xact.code + '-' + post.xact.payee + '-' + str(post.account)
-
-	def query_string(self, query):
-		out = self.query_amount(query)
+	def query_to_string(self, query):
+		out = ledger.Balance()
+		for post in self.journal.query(query):
+			out += post.amount
 		try:
 			return str(out.to_amount().to_double()).replace('.', DEC_SEP)
 		except Exception:
 			return 0.0
-
-	def query_amount(self, query):
-		out = ledger.Balance()
-		for post in self.journal.query(query):
-			out += post.amount
-		return out
-
-	def query_transaction(self, query, what=0):
-		# returns informatino about the transaction
-		# 0: simple array of str
-		# 1: array of tuples with the data like (date, aux_date, state, code, payee)
-
-		# init the out arrays
-		real = []
-		string = []
-
-		# cycle through the query
-		for post in self.journal.query(query):
-			# get the real data
-			date = post.date
-			aux_date = post.aux_date
-			state = post.xact.state
-			code = post.xact.code
-			payee = post.xact.payee
-			real.append( (date, aux_date, state, code, payee) )
-
-
-			# and get the string
-			date_str = date.strftime('%Y-%m-%d')
-			aux_date_str = aux_date.strftime('=%Y-%m-%d') if aux_date else ''
-			state_str = ' *' if state.real == 1 else ' !' if state.real == 2 else ''
-			code_str = ' (' + code + ')' if code else ''
-			payee_str = ' ' + payee
-			string.append( date_str + aux_date_str + state_str + code_str + payee_str )
-
-		# check what's wanted and output it
-		return string if what == 0 else real
 
 
 
@@ -150,11 +68,11 @@ class Afa_Transactions(object):
 
 	def calculate_costs(self, led, ledq, year):
 		# get total costs (buy date amount)
-		self.total_costs = ledgerparse.Money( ledq.query_string( '-p "' + self.buy_date.strftime('%Y-%m-%d') + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"' ) )
+		self.total_costs = ledgerparse.Money( ledq.query_to_string( '-l \"a>0\" -p "' + self.buy_date.strftime('%Y-%m-%d') + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"' ) )
 		# get costs_begin = amount for that account last year
-		self.costs_begin = ledgerparse.Money( ledq.query_string( '-p "to ' + str(year) + '-' + str(MONTH) + '-' + str(DAY) + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"' ) )
+		self.costs_begin = ledgerparse.Money( ledq.query_to_string( '-p "to ' + str(year) + '-' + str(MONTH) + '-' + str(DAY) + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"' ) )
 		# get costs_end = at end of the given year
-		self.costs_end = ledgerparse.Money( ledq.query_string('-p "to ' + str(year+1) + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"') )
+		self.costs_end = ledgerparse.Money( ledq.query_to_string('-p "to ' + str(year+1) + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"') )
 
 	def calculate_date(self, led):
 		# iterate through all transactions of the ledger journal
@@ -194,30 +112,35 @@ if len(sys.argv) < 2:
 	print 'Need at least a ledger journal file as parameter.'
 	exit()
 
-# no year given - get actual year
-if len(sys.argv) == 2:
-	YEAR = datetime.datetime.now().year
-else:
+# probably year given as parameter
+if len(sys.argv) == 3:
 	# get year into variable
 	try:
 		YEAR = int(sys.argv[2])
 	except:
+		# maybe it's the afa_account, use default year and parameter as afa_account
 		YEAR = datetime.datetime.now().year
+		AFA_ACCOUNT = sys.argv[2]
+
+# three parameter given
+if len(sys.argv) == 4:
+	# get second as year
+	try:
+		YEAR = int(sys.argv[2])
+	except:
+		# somethign went wrong
+		YEAR = datetime.datetime.now().year
+
+	# get the 3rd as afa_account
+	AFA_ACCOUNT = sys.argv[3]
+
+# afa_account as 3rd parameter given
 
 
 
 # get ledger journal into variable
-#LED		= ledgerparse.string_to_ledger( ledgerparse.ledger_file_to_string( sys.argv[1] ), True )
-LEDGER	= LEDGER_CLASS( ledger.read_journal( sys.argv[1] ), datetime.datetime(YEAR, MONTH, DAY), AFA_ACCOUNT )
-
-
-
-## TESTING AREA
-for x in LEDGER.get_items().values():
-	print x
-
-exit()
-## TESTING AREA
+LED		= ledgerparse.string_to_ledger( ledgerparse.ledger_file_to_string( sys.argv[1] ), True )
+LEDGER	= LEDGER_CLASS( ledger.read_journal( sys.argv[1] ) )
 
 
 
@@ -241,19 +164,44 @@ for L in LED:
 
 
 
+# output the spicy stuff
+WHITE = '\033[97m'
+PURPLE = '\033[95m'
+BLUE = '\033[94m'
+GREEN = '\033[92m'
+YELLOW = '\033[93m'
+RED = '\033[91m'
+CYAN = '\033[96m'
+BOLD = '\033[1m'
+DIM = '\033[2m'
+GREY = '\033[90m'
+UNDERLINE = '\033[4m'
+E = '\033[0m'
+
+def add_table_entry(date='', code='', item='', account='', costs='', costs_begin='', costs_diff='', costs_end=''):
+	LINE_A = [unicode(date, 'utf-8'), YELLOW + unicode(code, 'utf-8') + E, BOLD + unicode(item, 'utf-8') + E, RED + unicode(costs, 'utf-8') + E, WHITE + unicode(costs_begin, 'utf-8') + E , CYAN + unicode(costs_diff, 'utf-8') + E, WHITE + unicode(costs_end, 'utf-8') + E]
+	LINE_B = ['', '', PURPLE + unicode('   ' + account, 'utf-8') + E, '', '', '', '']
+	return [ LINE_A, LINE_B ]
+
+
+header = [ UNDERLINE + BOLD + BLUE + 'Kaufdatum', 'Beleg-Nr.', unicode('Gerät + Konto', 'utf-8'), 'Kaufpreis', 'Buchwert Anfang', 'Buchwert Diff', 'Buchwert Ende' + E ]
+table = [header]
+
+
 print
-for x in TRANSACTIONS:
-	print x.transaction.payee + ' (' + x.transaction.code + ')' + ' .... ' + x.id
-	print ' > ' + x.account
-	print ' --- Kaufdatum: ' + str(x.buy_date.strftime('%Y-%m-%d'))
-	print ' --- Anschaffungspreis: ' + str(x.total_costs)
-	print ' --- Buchwert Beginn: ' + str(x.costs_begin)
-	print ' --- Buchwert Differenz: ' + str(x.costs_diff())
-	print ' --- Buchwert Ende: ' + str(x.costs_end)
-	print
+sum_costs = ledgerparse.Money('0')
+sum_begin = ledgerparse.Money('0')
+sum_diff = ledgerparse.Money('0')
+sum_end = ledgerparse.Money('0')
+for x in sorted(TRANSACTIONS, key=lambda y: y.buy_date):
+	table.extend( add_table_entry( str(x.buy_date.strftime('%Y-%m-%d')), x.transaction.code, x.transaction.payee, str(x.account), str(x.total_costs), str(x.costs_begin), str(x.costs_diff()), str(x.costs_end) ) )
+	sum_costs += x.total_costs
+	sum_begin += x.costs_begin
+	sum_diff += x.costs_diff()
+	sum_end += x.costs_end
 
+table.extend( add_table_entry() )
+table.extend( add_table_entry(item='Summen:', costs=str(sum_costs), costs_begin=str(sum_begin), costs_diff=str(sum_diff), costs_end=str(sum_end)) )
 
-## TODO LISTE
-# - meinen ledgerparser weg lassen und nur ledger module verwenden?
-# - ledger module nur einmal iterieren lassen pro transaktion und dort buy_date + costs
-#	in eins raus finden?
+print tabulate.tabulate(table, tablefmt='plain')
+print
