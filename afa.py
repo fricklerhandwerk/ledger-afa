@@ -9,6 +9,8 @@
 ###   afa-tax-reduction:Microphones  € 100,00
 ###   inventory:NTG3 microphone
 ###
+### Also the payee has to be the same for the very first transaction of the inventory
+###
 
 
 
@@ -38,17 +40,97 @@ def gen_id(transaction, account_name):
 
 
 class LEDGER_CLASS(object):
-	def __init__(self, journal):
+	def __init__(self, journal, afa_date, afa_account):
 		self.journal = journal
+		self.afa_date = afa_date
+		self.afa_account = afa_account
 
-	def query_to_string(self, query):
-		out = ledger.Balance()
-		for post in self.journal.query(query):
-			out += post.amount
+ 		# items: [ id, payee, code, account, buy_date, buy_costs, costs_begin, costs_end ]
+		self.items = []
+		self.get_items()
+
+	def get_items(self, date=None, account=None):
+		# init out array
+		out = []
+
+		# use self.afa_date of object, if no date is given
+		if date == None:
+			date = self.afa_date
+
+		# use self.afa_account, if no account is given
+		if account == None:
+			account = self.afa_account
+
+		# get codes of transactions on the given day
+		# -> if they apply with afa_account
+		# -> and if they have a code
+		codes = []
+		accounts = {}
+		for post in self.journal.query('-p ' + date.strftime('%Y-%m-%d') + ' \"' + account + '\"' ):
+			# code?
+			if post.xact.code:
+				# append if it's not already in this array
+				if not post.xact.code in codes:
+					codes.append( post.xact.code )
+					accounts[post.xact.code] = ledger.Balance()
+				# amount of account where it comes from?
+				accounts[post.xact.code] += post.amount
+
+		# get buy date
+		buy_dates = []
+		for x in codes:
+			pass
+
+		return accounts
+
+	def gen_id(self, post):
+		# returns some kind of unique ID for a specific account and it's payee + code
+		# like "code-payee-account_name"
+		return post.xact.code + '-' + post.xact.payee + '-' + str(post.account)
+
+	def query_string(self, query):
+		out = self.query_amount(query)
 		try:
 			return str(out.to_amount().to_double()).replace('.', DEC_SEP)
 		except Exception:
 			return 0.0
+
+	def query_amount(self, query):
+		out = ledger.Balance()
+		for post in self.journal.query(query):
+			out += post.amount
+		return out
+
+	def query_transaction(self, query, what=0):
+		# returns informatino about the transaction
+		# 0: simple array of str
+		# 1: array of tuples with the data like (date, aux_date, state, code, payee)
+
+		# init the out arrays
+		real = []
+		string = []
+
+		# cycle through the query
+		for post in self.journal.query(query):
+			# get the real data
+			date = post.date
+			aux_date = post.aux_date
+			state = post.xact.state
+			code = post.xact.code
+			payee = post.xact.payee
+			real.append( (date, aux_date, state, code, payee) )
+
+
+			# and get the string
+			date_str = date.strftime('%Y-%m-%d')
+			aux_date_str = aux_date.strftime('=%Y-%m-%d') if aux_date else ''
+			state_str = ' *' if state.real == 1 else ' !' if state.real == 2 else ''
+			code_str = ' (' + code + ')' if code else ''
+			payee_str = ' ' + payee
+			string.append( date_str + aux_date_str + state_str + code_str + payee_str )
+
+		# check what's wanted and output it
+		return string if what == 0 else real
 
 
 
@@ -68,11 +150,11 @@ class Afa_Transactions(object):
 
 	def calculate_costs(self, led, ledq, year):
 		# get total costs (buy date amount)
-		self.total_costs = ledgerparse.Money( ledq.query_to_string( '-p "' + self.buy_date.strftime('%Y-%m-%d') + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"' ) )
+		self.total_costs = ledgerparse.Money( ledq.query_string( '-p "' + self.buy_date.strftime('%Y-%m-%d') + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"' ) )
 		# get costs_begin = amount for that account last year
-		self.costs_begin = ledgerparse.Money( ledq.query_to_string( '-p "to ' + str(year) + '-' + str(MONTH) + '-' + str(DAY) + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"' ) )
+		self.costs_begin = ledgerparse.Money( ledq.query_string( '-p "to ' + str(year) + '-' + str(MONTH) + '-' + str(DAY) + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"' ) )
 		# get costs_end = at end of the given year
-		self.costs_end = ledgerparse.Money( ledq.query_to_string('-p "to ' + str(year+1) + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"') )
+		self.costs_end = ledgerparse.Money( ledq.query_string('-p "to ' + str(year+1) + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"') )
 
 	def calculate_date(self, led):
 		# iterate through all transactions of the ledger journal
@@ -125,8 +207,17 @@ else:
 
 
 # get ledger journal into variable
-LED		= ledgerparse.string_to_ledger( ledgerparse.ledger_file_to_string( sys.argv[1] ), True )
-LEDGER	= LEDGER_CLASS( ledger.read_journal( sys.argv[1] ) )
+#LED		= ledgerparse.string_to_ledger( ledgerparse.ledger_file_to_string( sys.argv[1] ), True )
+LEDGER	= LEDGER_CLASS( ledger.read_journal( sys.argv[1] ), datetime.datetime(YEAR, MONTH, DAY), AFA_ACCOUNT )
+
+
+
+## TESTING AREA
+for x in LEDGER.get_items().values():
+	print x
+
+exit()
+## TESTING AREA
 
 
 
