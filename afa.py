@@ -12,13 +12,19 @@
 
 
 
-import sys, os, datetime, ledgerparse, ledger
+import sys, os, re, datetime, ledgerparse, ledger
 
 
 
-# afa relevant account
-AFA_ACCOUNT	= 'wirtschaftsgüter'
-
+### SOME SETTINGS
+#
+# afa relevant account, month and day, decimal seperator
+AFA_ACCOUNT	= 'ausgaben:job:absetzen:.*wirtschaftsgüter.*'
+MONTH		= 12
+DAY			= 31
+DEC_SEP		= ','
+#
+### SOME SETTINGS
 
 
 
@@ -35,11 +41,14 @@ class LEDGER_CLASS(object):
 	def __init__(self, journal):
 		self.journal = journal
 
-	def query_to_double(self, query):
+	def query_to_string(self, query):
 		out = ledger.Balance()
 		for post in self.journal.query(query):
 			out += post.amount
-		return out.to_amount().to_double()
+		try:
+			return str(out.to_amount().to_double()).replace('.', DEC_SEP)
+		except Exception:
+			return 0.0
 
 
 
@@ -50,34 +59,22 @@ class Afa_Transactions(object):
 		self.id = gen_id(transaction, account_name)
 
 		self.buy_date = datetime.datetime.now()
+		self.calculate_date(ledger)
+
 		self.total_costs = ledgerparse.Money(real_amount=0)
-		self.calculate_date_and_total_costs(ledger)
+		self.costs_begin = ledgerparse.Money(real_amount=0)
+		self.costs_end = ledgerparse.Money(real_amount=0)
+		self.calculate_costs(ledger, ledger_query, year)
 
-		self.costs_begin = ledgerparse.Money(real_amount=self.total_costs.amount)
-		self.costs_end = ledgerparse.Money(real_amount=self.total_costs.amount)
-		self.calculate_costs_begin_and_end(ledger, year)
+	def calculate_costs(self, led, ledq, year):
+		# get total costs (buy date amount)
+		self.total_costs = ledgerparse.Money( ledq.query_to_string( '-p "' + self.buy_date.strftime('%Y-%m-%d') + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"' ) )
+		# get costs_begin = amount for that account last year
+		self.costs_begin = ledgerparse.Money( ledq.query_to_string( '-p "to ' + str(year) + '-' + str(MONTH) + '-' + str(DAY) + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"' ) )
+		# get costs_end = at end of the given year
+		self.costs_end = ledgerparse.Money( ledq.query_to_string('-p "to ' + str(year+1) + '" \"' + self.account + '\" and \"#' + self.transaction.code + '\"') )
 
-	def calculate_costs_begin_and_end(self, led, year):
-		# iterate through the years
-		for Y in xrange(self.buy_date.year, year+1):
-			# iterate through all transactions of the ledger journal
-			for l in led:
-				# check if the transaction code is the same
-				if l.code == self.transaction.code:
-					# check if the year is correct
-					if l.date.year == Y:
-						# check if there is an afa account in the transaction accounts
-						if any(AFA_ACCOUNT.lower() in s.name.lower() for s in l.accounts):
-							# check the correct account name
-							for i, a in enumerate(l.accounts):
-								if a.name == self.account:
-									# THEN substract this amount from the total costs
-									self.costs_end.amount -= abs( l.balance_account(i).amount )
-									# also substract, if the year is not the chosen year
-									if Y < year:
-										self.costs_begin.amount -= abs( l.balance_account(i).amount )
-
-	def calculate_date_and_total_costs(self, led):
+	def calculate_date(self, led):
 		# iterate through all transactions of the ledger journal
 		for l in led:
 			# check if the transaction code is the same
@@ -89,8 +86,6 @@ class Afa_Transactions(object):
 						if l.aux_date < self.buy_date:
 							# refresh temp date
 							self.buy_date = l.aux_date
-							# and it's amount: first transaction should use total costs
-							self.total_costs = l.balance_account(i)
 
 	def calculate_account(self, led, otherwise):
 		# check which account of the transactions is < 0 and use this account name
@@ -140,13 +135,13 @@ TRANSACTIONS = []
 
 # get accounts which are afa-compliant the chosen year
 for L in LED:
-	# get only transactions done this year on YEAR-12-31 (aux date of afa transactions!!)
-	if L.aux_date == datetime.datetime(YEAR, 12, 31):
+	# get only transactions done this year (aux date of afa transactions!!)
+	if L.aux_date == datetime.datetime(YEAR, MONTH, DAY):
 		# ... and those who HAVE a code
 		if len(L.code) > 0:
 			# ... and which names have afa account in it
 			for i, acc in enumerate(L.accounts):
-				if AFA_ACCOUNT.lower() in acc.name.lower():
+				if re.match(AFA_ACCOUNT, acc.name, re.IGNORECASE):
 					# ... and only accounts which have amount > 0 on YEAR-12-31
 					if L.balance_account(i).amount > 0:
 						# and only if this does not already exists
@@ -154,9 +149,8 @@ for L in LED:
 							TRANSACTIONS.append( Afa_Transactions(L, acc.name, LED, LEDGER, YEAR) )
 
 
-print LEDGER.query_to_double('ausgaben and not nicht')
 
-exit()
+print
 for x in TRANSACTIONS:
 	print x.transaction.payee + ' (' + x.transaction.code + ')' + ' .... ' + x.id
 	print ' > ' + x.account
@@ -166,3 +160,9 @@ for x in TRANSACTIONS:
 	print ' --- Buchwert Differenz: ' + str(x.costs_diff())
 	print ' --- Buchwert Ende: ' + str(x.costs_end)
 	print
+
+
+## TODO LISTE
+# - meinen ledgerparser weg lassen und nur ledger module verwenden?
+# - ledger module nur einmal iterieren lassen pro transaktion und dort buy_date + costs
+#	in eins raus finden?
