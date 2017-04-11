@@ -195,7 +195,11 @@ class AfaTransactions(object):
                 if len(trans.code) > 0:
                     # ... and which names have afa account in it
                     for i, acc in enumerate(trans.accounts):
-                        if re.match(ARGUMENTS.account, acc.name, re.IGNORECASE):
+                        if re.match(
+                                ARGUMENTS.account,
+                                acc.name,
+                                re.IGNORECASE
+                        ):
                             # ... and only accounts which have amount > 0
                             # on YEAR-MONTH-DAY
                             if trans.balance_account(i).amount > 0:
