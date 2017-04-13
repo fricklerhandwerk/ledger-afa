@@ -14,24 +14,20 @@ business). Example:
 """
 
 import argparse
-import re
 import datetime
-import ledgerparse
 import ledger
+import ledgerparse
+import re
 import tabulate
 
 
-# SOME SETTINGS
-
 # afa relevant account, month and day, decimal seperator
-
 AFA_ACCOUNT = 'ausgaben:job:absetzen:.*wirtschaftsgüter.*'
 MONTH = 12
 DAY = 31
 DEC_SEP = ','
 
 # color coding
-
 WHITE = '\033[97m'
 PURPLE = '\033[95m'
 BLUE = '\033[94m'
@@ -44,8 +40,6 @@ DIM = '\033[2m'
 GREY = '\033[90m'
 UNDERLINE = '\033[4m'
 E = '\033[0m'
-
-# SOME SETTINGS
 
 
 # functions
@@ -131,27 +125,13 @@ class SingleAfaTransaction(object):
         self.costs_end = ledgerparse.Money(ledq.query_to_string(query))
 
     def calculate_date(self, ledger_journal):
-        """
-        Find buy date.
-
-        Find the minimum date for the transaction with the same
-        transaction code.
-        """
+        """Find buy date."""
+        # FIXME: Find the minimum date for the transaction with the same
+        #        transaction code. This is probably not very robust.
         self.buy_date = min(
             t.aux_date for t in ledger_journal
             if t.code == self.transaction.code
         )
-        # iterate through all transactions of the ledger journal
-        # for l in led:
-        #     # check if the transaction code is the same
-        #     if l.code == self.transaction.code:
-        #         for i, a in enumerate(l.accounts):
-        #             # check if the account is in this transaction
-        #             if self.account == a.name:
-        #                 # check if the date of the transaction is lower
-        #                 if l.aux_date < self.buy_date:
-        #                     # refresh temp date
-        #                     self.buy_date = l.aux_date
 
     def calculate_account(self, led, otherwise):
         """Get the account name of the inventory account."""
@@ -187,6 +167,7 @@ class AfaTransactions(object):
 
     def get_afa_accounts(self):
         """Search all transactions, which are afa compliant."""
+        # FIXME: Refactor this to make it readable.
         out = []
         for trans in self.ledgerparse:
             # get only transactions done this year (aux date of afa trans!)
@@ -297,13 +278,11 @@ class AfaTransactions(object):
             costs_end=str(sum_end))
         )
 
-        print
-        print tabulate.tabulate(table, tablefmt='plain')
-        print
+        print(tabulate.tabulate(table, tablefmt='plain'))
 
 
+# FIXME: Put this in a `main()`.
 # set up the arguments
-
 ap = argparse.ArgumentParser(
     description='Programm for calculating and summing up tax reduction'
     ' inventory purchases.'
@@ -331,7 +310,6 @@ ARGUMENTS = ap.parse_args()
 
 
 # get ledger journal into the afa transactions class
-
 AFA = AfaTransactions(
     ledgerparse.string_to_ledger(
         ledgerparse.ledger_file_to_string(ARGUMENTS.file),
@@ -344,5 +322,4 @@ AFA = AfaTransactions(
 
 
 # get spicy output, baby!
-
 AFA.output()
