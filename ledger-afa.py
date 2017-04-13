@@ -1,7 +1,8 @@
 # coding=utf-8
 
 """
-A program for calculating and outputing tax reducing purchases.
+A program for calculating and displaying tax deprecation on specified items
+in a ledger journal.
 
 This script will only work, if there are only TWO accounts in the afa
 transaction at the end of a ARGUMENTS.year: the one which will apply to the
