@@ -23,7 +23,7 @@ import tabulate
 
 
 # afa relevant account, month and day, decimal seperator
-AFA_ACCOUNT = 'ausgaben:job:absetzen:.*wirtschaftsgüter.*'
+AFA_ACCOUNT = 'AfA'
 MONTH = 12
 DAY = 31
 DEC_SEP = ','
@@ -160,10 +160,12 @@ class SingleAfaTransaction(object):
 class AfaTransactions(object):
     """Holds all AfaTransaction-Objects."""
 
-    def __init__(self, ledgerparse, ledgerclass):
+    def __init__(self, ledgerparse, ledgerclass, account, year):
         """Initialize the class."""
         self.ledgerparse = ledgerparse
         self.ledgerclass = ledgerclass
+        self.account = account
+        self.year = year
         self.transactions = self.get_afa_accounts()
 
     def get_afa_accounts(self):
@@ -172,13 +174,13 @@ class AfaTransactions(object):
         out = []
         for trans in self.ledgerparse:
             # get only transactions done this year (aux date of afa trans!)
-            if trans.aux_date == datetime.datetime(ARGUMENTS.year, MONTH, DAY):
+            if trans.aux_date == datetime.datetime(self.year, MONTH, DAY):
                 # ... and those who HAVE a code
                 if len(trans.code) > 0:
                     # ... and which names have afa account in it
                     for i, acc in enumerate(trans.accounts):
                         if re.match(
-                                ARGUMENTS.account,
+                                self.account,
                                 acc.name,
                                 re.IGNORECASE
                         ):
@@ -194,7 +196,7 @@ class AfaTransactions(object):
                                             acc.name,
                                             self.ledgerparse,
                                             self.ledgerclass,
-                                            ARGUMENTS.year
+                                            self.year
                                         )
                                     )
         return out
@@ -282,45 +284,48 @@ class AfaTransactions(object):
         print(tabulate.tabulate(table, tablefmt='plain'))
 
 
-# FIXME: Put this in a `main()`.
-# set up the arguments
-ap = argparse.ArgumentParser(
-    description='Programm for calculating and summing up tax reduction'
-    ' inventory purchases.'
-)
-
-ap.add_argument(
-    'file',
-    help='a ledger journal'
-)
-ap.add_argument(
-    '-y',
-    '--year',
-    type=int,
-    default=datetime.datetime.now().year,
-    help='year for calculation'
-)
-ap.add_argument(
-    '-a',
-    '--account',
-    default=AFA_ACCOUNT,
-    help='afa account'
-)
-
-ARGUMENTS = ap.parse_args()
-
-
-# get ledger journal into the afa transactions class
-AFA = AfaTransactions(
-    ledgerparse.string_to_ledger(
-        ledgerparse.ledger_file_to_string(ARGUMENTS.file),
-        True
-    ),
-    LedgerClass(
-        ledger.read_journal(ARGUMENTS.file)
+def main():
+    # set up the arguments
+    ap = argparse.ArgumentParser(
+        description='Programm for calculating and summing up tax reduction'
+        ' inventory purchases.'
     )
-)
 
+    ap.add_argument(
+        'file',
+        help='a ledger journal'
+    )
+    ap.add_argument(
+        '-y',
+        '--year',
+        type=int,
+        default=datetime.datetime.now().year,
+        help='year for calculation'
+    )
+    ap.add_argument(
+        '-a',
+        '--account',
+        default=AFA_ACCOUNT,
+        help='afa account'
+    )
 
-# get spicy output, baby!
-AFA.output()
+    ARGUMENTS = ap.parse_args()
+
+    # get ledger journal into the afa transactions class
+    AFA = AfaTransactions(
+        ledgerparse.string_to_ledger(
+            ledgerparse.ledger_file_to_string(ARGUMENTS.file),
+            True
+        ),
+        LedgerClass(
+            ledger.read_journal(ARGUMENTS.file)
+        ),
+        ARGUMENTS.account,
+        ARGUMENTS.year,
+    )
+
+    # get spicy output, baby!
+    AFA.output()
+
+if __name__ == '__main__':
+    main()
