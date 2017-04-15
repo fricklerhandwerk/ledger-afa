@@ -282,45 +282,46 @@ class AfaTransactions(object):
         print(tabulate.tabulate(table, tablefmt='plain'))
 
 
-# FIXME: Put this in a `main()`.
-# set up the arguments
-ap = argparse.ArgumentParser(
-    description='Programm for calculating and summing up tax reduction'
-    ' inventory purchases.'
-)
-
-ap.add_argument(
-    'file',
-    help='a ledger journal'
-)
-ap.add_argument(
-    '-y',
-    '--year',
-    type=int,
-    default=datetime.datetime.now().year,
-    help='year for calculation'
-)
-ap.add_argument(
-    '-a',
-    '--account',
-    default=AFA_ACCOUNT,
-    help='afa account'
-)
-
-ARGUMENTS = ap.parse_args()
-
-
-# get ledger journal into the afa transactions class
-AFA = AfaTransactions(
-    ledgerparse.string_to_ledger(
-        ledgerparse.ledger_file_to_string(ARGUMENTS.file),
-        True
-    ),
-    LedgerClass(
-        ledger.read_journal(ARGUMENTS.file)
+def main():
+    # set up the arguments
+    ap = argparse.ArgumentParser(
+        description='Programm for calculating and summing up tax reduction'
+        ' inventory purchases.'
     )
-)
 
+    ap.add_argument(
+        'file',
+        help='a ledger journal'
+    )
+    ap.add_argument(
+        '-y',
+        '--year',
+        type=int,
+        default=datetime.datetime.now().year,
+        help='year for calculation'
+    )
+    ap.add_argument(
+        '-a',
+        '--account',
+        default=AFA_ACCOUNT,
+        help='afa account'
+    )
 
-# get spicy output, baby!
-AFA.output()
+    ARGUMENTS = ap.parse_args()
+
+    # get ledger journal into the afa transactions class
+    AFA = AfaTransactions(
+        ledgerparse.string_to_ledger(
+            ledgerparse.ledger_file_to_string(ARGUMENTS.file),
+            True
+        ),
+        LedgerClass(
+            ledger.read_journal(ARGUMENTS.file)
+        )
+    )
+
+    # get spicy output, baby!
+    AFA.output()
+
+if __name__ == '__main__':
+    main()
