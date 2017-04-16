@@ -81,7 +81,7 @@ class SingleAfaTransaction(object):
     ):
         """Initialize the class object."""
         self.transaction = transaction
-        self.account = self.calculate_account(ledger, account_name)
+        self.account = self.calculate_account(account_name)
         self.id = gen_id(transaction, account_name)
 
         self.buy_date = datetime.datetime.now()
@@ -134,15 +134,14 @@ class SingleAfaTransaction(object):
             if t.code == self.transaction.code
         )
 
-    def calculate_account(self, led, otherwise):
+    def calculate_account(self, default):
         """Get the account name of the inventory account."""
-        # check which account of the transactions is < 0
-        for y, acc in enumerate(self.transaction.accounts):
-            if self.transaction.balance_account(y) < ledgerparse.Money('0'):
-                return self.transaction.accounts[y].name
+        # the inventory account is distinguished by negative balance
+        for i, _ in enumerate(self.transaction.accounts):
+            if self.transaction.balance_account(i) < ledgerparse.Money('0'):
+                return self.transaction.accounts[i].name
 
-        # change nothing otherwise
-        return otherwise
+        return default
 
     def costs_diff(self):
         """Calculate the difference between costs_beginn and costs_end."""
