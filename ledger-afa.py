@@ -43,13 +43,6 @@ UNDERLINE = '\033[4m'
 E = '\033[0m'
 
 
-# functions
-
-def gen_id(transaction, account_name):
-    """Generate an ID with the given transaction and account_name."""
-    return transaction.code + '-' + transaction.payee + '-' + account_name
-
-
 class LedgerClass(object):
     """Holds the ledger journal and can query it."""
 
@@ -80,7 +73,7 @@ class SingleAfaTransaction(object):
         """Initialize the class object."""
         self.transaction = transaction
         self.account = self.calculate_account(account_name)
-        self.id = gen_id(transaction, account_name)
+        self.id = transaction.id
 
         self.buy_date = datetime.datetime.now()
         self.calculate_date(journal)
@@ -134,9 +127,9 @@ class SingleAfaTransaction(object):
     def calculate_account(self, default):
         """Get the account name of the inventory account."""
         # the inventory account is distinguished by negative balance
-        for i, _ in enumerate(self.transaction.accounts):
-            if self.transaction.balance_account(i) < ledgerparse.Money('0'):
-                return self.transaction.accounts[i].name
+        for post in self.transaction.posts():
+            if post.amount < 0:
+                return post.account.fullname()
 
         return default
 
@@ -156,9 +149,8 @@ class SingleAfaTransaction(object):
 class AfaTransactions(object):
     """Holds all AfaTransaction-Objects."""
 
-    def __init__(self, parser, journal, account, year):
+    def __init__(self, journal, account, year):
         """Initialize the class."""
-        self.parser = parser
         self.journal = journal
         self.account = account
         self.year = year
@@ -168,20 +160,23 @@ class AfaTransactions(object):
         """Search all transactions, which are afa compliant."""
         # FIXME: Refactor this to make it readable.
         out = []
-        for trans in self.parser:
+        transactions = self.journal.journal.xacts()
+        for trans in transactions:
             # get transactions done this year (aux date of afa trans!)
             # and those who HAVE a code
-            this_year = datetime.datetime(self.year, MONTH, DAY)
-            if trans.aux_date == this_year and trans.code:
-                for i, acc in enumerate(trans.accounts):
-                    # names have afa account in it
-                    matches = re.match(self.account, acc.name, re.IGNORECASE)
-                    amount_positive = trans.balance_account(i).amount > 0
-                    exists = (gen_id(trans, acc.name) in [t.id for t in out])
+            this_year = datetime.date(self.year, MONTH, DAY)
+            if trans.date == this_year and trans.code:
+                for post in trans.posts():
+                    name = post.account.fullname()
+
+                    matches = re.match(self.account, name, re.IGNORECASE)
+                    amount_positive = post.amount > 0
+                    exists = (trans.id in [t.id for t in out])
+
                     if matches and amount_positive and not exists:
                         tx = SingleAfaTransaction(
                             trans,
-                            acc.name,
+                            name,
                             self.journal,
                             self.year,
                         )
@@ -298,16 +293,9 @@ def main():
 
     ARGUMENTS = ap.parse_args()
 
-    parser_string = ledgerparse.ledger_file_to_string(ARGUMENTS.file)
-    parser = ledgerparse.string_to_ledger(parser_string, True)
     journal = LedgerClass(ledger.read_journal(ARGUMENTS.file))
 
-    AFA = AfaTransactions(
-        parser,
-        journal,
-        ARGUMENTS.account,
-        ARGUMENTS.year,
-    )
+    AFA = AfaTransactions(journal, ARGUMENTS.account, ARGUMENTS.year)
 
     # get spicy output, baby!
     AFA.output()
