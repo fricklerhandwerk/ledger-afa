@@ -88,7 +88,7 @@ class SingleAfaTransaction(object):
         Calculate the costs for the transaction.
 
         Get the total costs, costs at the end of the last year
-        and the costs at the end of the actual year.
+        and the costs at the end of the current year.
         """
         # get total costs (buy date amount)
         query = '-l "a>0" -p "{}" "{}" and "#{}"'.format(
