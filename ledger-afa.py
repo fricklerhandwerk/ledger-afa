@@ -59,11 +59,9 @@ class LedgerClass(object):
 
     def query_to_string(self, query):
         """Output a string with a given query for ledger."""
-        out = ledger.Balance()
-        for post in self.journal.query(query):
-            out += post.amount
+        out = sum(post.amount for post in self.journal.query(query))
         try:
-            return str(out.to_amount().to_double()).replace('.', DEC_SEP)
+            return str(out.to_double()).replace('.', DEC_SEP)
         except Exception:
             return 0.0
 
