@@ -75,8 +75,8 @@ class SingleAfaTransaction(object):
         self,
         transaction,
         account_name,
-        ledger,
-        ledger_query,
+        parser,
+        journal,
         year=datetime.datetime.now().year
     ):
         """Initialize the class object."""
@@ -85,12 +85,12 @@ class SingleAfaTransaction(object):
         self.id = gen_id(transaction, account_name)
 
         self.buy_date = datetime.datetime.now()
-        self.calculate_date(ledger)
+        self.calculate_date(parser)
 
         self.total_costs = ledgerparse.Money(real_amount=0)
         self.costs_begin = ledgerparse.Money(real_amount=0)
         self.costs_end = ledgerparse.Money(real_amount=0)
-        self.calculate_costs(ledger_query, year)
+        self.calculate_costs(journal, year)
 
     def calculate_costs(self, journal, year):
         """
@@ -310,15 +310,13 @@ def main():
 
     ARGUMENTS = ap.parse_args()
 
-    # get ledger journal into the afa transactions class
+    parser_string = ledgerparse.ledger_file_to_string(ARGUMENTS.file)
+    parser = ledgerparse.string_to_ledger(parser_string, True)
+    journal = LedgerClass(ledger.read_journal(ARGUMENTS.file))
+
     AFA = AfaTransactions(
-        ledgerparse.string_to_ledger(
-            ledgerparse.ledger_file_to_string(ARGUMENTS.file),
-            True
-        ),
-        LedgerClass(
-            ledger.read_journal(ARGUMENTS.file)
-        ),
+        parser,
+        journal,
         ARGUMENTS.account,
         ARGUMENTS.year,
     )
