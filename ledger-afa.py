@@ -74,7 +74,6 @@ class SingleAfaTransaction(object):
         self,
         transaction,
         account_name,
-        parser,
         journal,
         year=datetime.datetime.now().year
     ):
@@ -84,7 +83,7 @@ class SingleAfaTransaction(object):
         self.id = gen_id(transaction, account_name)
 
         self.buy_date = datetime.datetime.now()
-        self.calculate_date(parser)
+        self.calculate_date(journal)
 
         self.total_costs = ledgerparse.Money(real_amount=0)
         self.costs_begin = ledgerparse.Money(real_amount=0)
@@ -124,14 +123,13 @@ class SingleAfaTransaction(object):
         )
         self.costs_end = ledgerparse.Money(journal.query_total(query))
 
-    def calculate_date(self, ledger_journal):
+    def calculate_date(self, journal):
         """Find buy date."""
         # FIXME: Find the minimum date for the transaction with the same
         #        transaction code. This is probably not very robust.
-        self.buy_date = min(
-            t.aux_date for t in ledger_journal
-            if t.code == self.transaction.code
-        )
+        transactions = journal.journal.xacts()
+        self.buy_date = min(t.date for t in transactions
+                            if t.code == self.transaction.code)
 
     def calculate_account(self, default):
         """Get the account name of the inventory account."""
@@ -184,7 +182,6 @@ class AfaTransactions(object):
                         tx = SingleAfaTransaction(
                             trans,
                             acc.name,
-                            self.parser,
                             self.journal,
                             self.year,
                         )
