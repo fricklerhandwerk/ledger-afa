@@ -17,10 +17,10 @@ business). Example:
 import argparse
 import datetime
 import ledger
-import ledgerparse
 import re
 import tabulate
 
+from ledger import Amount
 
 # afa relevant account, month and day, decimal seperator
 AFA_ACCOUNT = 'AfA'
@@ -52,12 +52,7 @@ class LedgerClass(object):
 
     def query_total(self, query):
         """Compute total of queried posts"""
-        out = sum(post.amount for post in self.journal.query(query))
-        try:
-            # FIXME: keep using `ledger.Amount`
-            return str(out.to_double()).replace('.', DEC_SEP)
-        except Exception:
-            return 0.0
+        return sum(post.amount for post in self.journal.query(query))
 
 
 class SingleAfaTransaction(object):
@@ -78,9 +73,9 @@ class SingleAfaTransaction(object):
         self.buy_date = datetime.datetime.now()
         self.calculate_date(journal)
 
-        self.total_costs = ledgerparse.Money(real_amount=0)
-        self.costs_begin = ledgerparse.Money(real_amount=0)
-        self.costs_end = ledgerparse.Money(real_amount=0)
+        self.total_costs = Amount(0)
+        self.costs_begin = Amount(0)
+        self.costs_end = Amount(0)
         self.calculate_costs(journal, year)
 
     def calculate_costs(self, journal, year):
@@ -96,7 +91,7 @@ class SingleAfaTransaction(object):
             self.account,
             self.transaction.code
         )
-        self.total_costs = ledgerparse.Money(journal.query_total(query))
+        self.total_costs = journal.query_total(query)
 
         # get costs_begin = amount for that account last year
         query = '-p "to {}-{}-{}" "{}" and "#{}"'.format(
@@ -106,7 +101,7 @@ class SingleAfaTransaction(object):
             self.account,
             self.transaction.code
         )
-        self.costs_begin = ledgerparse.Money(journal.query_total(query))
+        self.costs_begin = journal.query_total(query)
 
         # get costs_end = at end of the given year
         query = '-p "to {}" "{}" and "#{}"'.format(
@@ -114,7 +109,7 @@ class SingleAfaTransaction(object):
             self.account,
             self.transaction.code
         )
-        self.costs_end = ledgerparse.Money(journal.query_total(query))
+        self.costs_end = journal.query_total(query)
 
     def calculate_date(self, journal):
         """Find buy date."""
@@ -232,10 +227,10 @@ class AfaTransactions(object):
         table = [header]
 
         # init the variables for the output
-        sum_costs = ledgerparse.Money('0')
-        sum_begin = ledgerparse.Money('0')
-        sum_diff = ledgerparse.Money('0')
-        sum_end = ledgerparse.Money('0')
+        sum_costs = Amount(0)
+        sum_begin = Amount(0)
+        sum_diff = Amount(0)
+        sum_end = Amount(0)
 
         # get variables from transaction list
         for x in sorted(self.transactions, key=lambda y: y.buy_date):
