@@ -90,9 +90,9 @@ class SingleAfaTransaction(object):
         self.total_costs = ledgerparse.Money(real_amount=0)
         self.costs_begin = ledgerparse.Money(real_amount=0)
         self.costs_end = ledgerparse.Money(real_amount=0)
-        self.calculate_costs(ledger, ledger_query, year)
+        self.calculate_costs(ledger_query, year)
 
-    def calculate_costs(self, led, ledq, year):
+    def calculate_costs(self, journal, year):
         """
         Calculate the costs for the transaction.
 
@@ -105,7 +105,7 @@ class SingleAfaTransaction(object):
             self.account,
             self.transaction.code
         )
-        self.total_costs = ledgerparse.Money(ledq.query_to_string(query))
+        self.total_costs = ledgerparse.Money(journal.query_to_string(query))
 
         # get costs_begin = amount for that account last year
         query = '-p "to {}-{}-{}" "{}" and "#{}"'.format(
@@ -115,7 +115,7 @@ class SingleAfaTransaction(object):
             self.account,
             self.transaction.code
         )
-        self.costs_begin = ledgerparse.Money(ledq.query_to_string(query))
+        self.costs_begin = ledgerparse.Money(journal.query_to_string(query))
 
         # get costs_end = at end of the given year
         query = '-p "to {}" "{}" and "#{}"'.format(
@@ -123,7 +123,7 @@ class SingleAfaTransaction(object):
             self.account,
             self.transaction.code
         )
-        self.costs_end = ledgerparse.Money(ledq.query_to_string(query))
+        self.costs_end = ledgerparse.Money(journal.query_to_string(query))
 
     def calculate_date(self, ledger_journal):
         """Find buy date."""
