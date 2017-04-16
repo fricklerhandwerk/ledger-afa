@@ -57,10 +57,11 @@ class LedgerClass(object):
         """First parameter has to be a ledger journal."""
         self.journal = journal
 
-    def query_to_string(self, query):
-        """Output a string with a given query for ledger."""
+    def query_total(self, query):
+        """Compute total of queried posts"""
         out = sum(post.amount for post in self.journal.query(query))
         try:
+            # FIXME: keep using `ledger.Amount`
             return str(out.to_double()).replace('.', DEC_SEP)
         except Exception:
             return 0.0
@@ -103,7 +104,7 @@ class SingleAfaTransaction(object):
             self.account,
             self.transaction.code
         )
-        self.total_costs = ledgerparse.Money(journal.query_to_string(query))
+        self.total_costs = ledgerparse.Money(journal.query_total(query))
 
         # get costs_begin = amount for that account last year
         query = '-p "to {}-{}-{}" "{}" and "#{}"'.format(
@@ -113,7 +114,7 @@ class SingleAfaTransaction(object):
             self.account,
             self.transaction.code
         )
-        self.costs_begin = ledgerparse.Money(journal.query_to_string(query))
+        self.costs_begin = ledgerparse.Money(journal.query_total(query))
 
         # get costs_end = at end of the given year
         query = '-p "to {}" "{}" and "#{}"'.format(
@@ -121,7 +122,7 @@ class SingleAfaTransaction(object):
             self.account,
             self.transaction.code
         )
-        self.costs_end = ledgerparse.Money(journal.query_to_string(query))
+        self.costs_end = ledgerparse.Money(journal.query_total(query))
 
     def calculate_date(self, ledger_journal):
         """Find buy date."""
