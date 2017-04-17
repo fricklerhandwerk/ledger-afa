@@ -43,6 +43,11 @@ UNDERLINE = '\033[4m'
 E = '\033[0m'
 
 
+def gen_id(transaction, account_name):
+    """Generate an ID with the given transaction and account_name."""
+    return transaction.code + '-' + transaction.payee + '-' + account_name
+
+
 class LedgerClass(object):
     """Holds the ledger journal and can query it."""
 
@@ -68,7 +73,7 @@ class SingleAfaTransaction(object):
         """Initialize the class object."""
         self.transaction = transaction
         self.account = self.calculate_account(account_name)
-        self.id = transaction.id
+        self.id = gen_id(transaction, account_name)
 
         self.buy_date = datetime.datetime.now()
         self.calculate_date(journal)
@@ -166,7 +171,7 @@ class AfaTransactions(object):
 
                     matches = re.match(self.account, name, re.IGNORECASE)
                     amount_positive = post.amount > 0
-                    exists = (trans.id in [t.id for t in out])
+                    exists = gen_id(trans, name) in [t.id for t in out]
 
                     if matches and amount_positive and not exists:
                         tx = SingleAfaTransaction(
