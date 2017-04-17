@@ -20,29 +20,15 @@ import ledger
 import re
 import tabulate
 
+from colorama import init
 from datetime import date
 from ledger import Amount
+from termcolor import colored
 
 
-# afa relevant account, month and day, decimal seperator
 AFA_ACCOUNT = 'AfA'
 MONTH = 12
 DAY = 31
-DEC_SEP = ','
-
-# color coding
-WHITE = '\033[97m'
-PURPLE = '\033[95m'
-BLUE = '\033[94m'
-GREEN = '\033[92m'
-YELLOW = '\033[93m'
-RED = '\033[91m'
-CYAN = '\033[96m'
-BOLD = '\033[1m'
-DIM = '\033[2m'
-GREY = '\033[90m'
-UNDERLINE = '\033[4m'
-E = '\033[0m'
 
 
 class LedgerClass(object):
@@ -195,39 +181,42 @@ class AfaTransactions(object):
         """Output two tabulate compliant table lines."""
         line_a = [
             unicode(date, 'utf-8'),
-            YELLOW + unicode(code, 'utf-8') + E,
-            BOLD + unicode(item, 'utf-8') + E,
-            RED + unicode(costs, 'utf-8') + E,
-            WHITE + unicode(costs_begin, 'utf-8') + E,
-            CYAN + unicode(costs_diff, 'utf-8') + E,
-            WHITE + unicode(costs_end, 'utf-8') + E
+            colored(unicode(code, 'utf-8'), 'yellow'),
+            colored(unicode(item, 'utf-8'), attrs=['bold']),
+            colored(unicode(costs, 'utf-8'), 'red'),
+            unicode(costs_begin, 'utf-8'),
+            colored(unicode(costs_diff, 'utf-8'), 'cyan'),
+            unicode(costs_end, 'utf-8'),
         ]
         line_b = [
             '',
             '',
-            PURPLE + unicode('   ' + account, 'utf-8') + E,
+            colored(unicode('   ' + account, 'utf-8'), 'magenta'),
             '',
             '',
             '',
-            ''
+            '',
         ]
         return [line_a, line_b]
 
     def output(self):
         """Print the afa transactions on the output."""
         # init the header for the table
+        def color_header(s):
+            return colored(s, 'blue', attrs=['underline', 'bold'])
+
         header = [
-            UNDERLINE + BOLD + BLUE + 'Kaufdatum',
+            'Kaufdatum',
             'Beleg-Nr.',
             unicode('Gerät + Konto', 'utf-8'),
             'Kaufpreis',
             'Buchwert Anfang',
             'Buchwert Diff',
-            'Buchwert Ende' + E
+            'Buchwert Ende',
         ]
 
         # init the table
-        table = [header]
+        table = [map(color_header, header)]
 
         # init the variables for the output
         sum_costs = Amount('0,00')
@@ -296,6 +285,7 @@ def main():
     AFA = AfaTransactions(journal, ARGUMENTS.account, ARGUMENTS.year)
 
     # get spicy output, baby!
+    init()
     AFA.output()
 
 if __name__ == '__main__':
