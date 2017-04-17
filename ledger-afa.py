@@ -68,7 +68,6 @@ class SingleAfaTransaction(object):
         """Initialize the class object."""
         self.transaction = transaction
         self.account = self.calculate_account(account_name)
-        self.id = transaction.id
 
         self.buy_date = datetime.datetime.now()
         self.calculate_date(journal)
@@ -86,28 +85,31 @@ class SingleAfaTransaction(object):
         and the costs at the end of the current year.
         """
         # get total costs (buy date amount)
-        query = '-l "a>0" -p "{}" "{}" and "#{}"'.format(
+        query = '-l "a>0" -p "{}" "{}" and "#{}" and @"{}"'.format(
             self.buy_date.strftime('%Y-%m-%d'),
             self.account,
-            self.transaction.code
+            self.transaction.code,
+            self.transaction.payee
         )
         self.total_costs = journal.query_total(query)
 
         # get costs_begin = amount for that account last year
-        query = '-p "to {}-{}-{}" "{}" and "#{}"'.format(
+        query = '-p "to {}-{}-{}" "{}" and "#{}" and @"{}"'.format(
             str(year),
             str(MONTH),
             str(DAY),
             self.account,
-            self.transaction.code
+            self.transaction.code,
+            self.transaction.payee
         )
         self.costs_begin = journal.query_total(query)
 
         # get costs_end = at end of the given year
-        query = '-p "to {}" "{}" and "#{}"'.format(
+        query = '-p "to {}" "{}" and "#{}" and @"{}"'.format(
             str(year + 1),
             self.account,
-            self.transaction.code
+            self.transaction.code,
+            self.transaction.payee
         )
         self.costs_end = journal.query_total(query)
 
@@ -166,7 +168,7 @@ class AfaTransactions(object):
 
                     matches = re.match(self.account, name, re.IGNORECASE)
                     amount_positive = post.amount > 0
-                    exists = (trans.id in [t.id for t in out])
+                    exists = (trans.id in [t.transaction.id for t in out])
 
                     if matches and amount_positive and not exists:
                         tx = SingleAfaTransaction(
@@ -227,10 +229,10 @@ class AfaTransactions(object):
         table = [header]
 
         # init the variables for the output
-        sum_costs = Amount(0)
-        sum_begin = Amount(0)
-        sum_diff = Amount(0)
-        sum_end = Amount(0)
+        sum_costs = Amount('0,00')
+        sum_begin = Amount('0,00')
+        sum_diff = Amount('0,00')
+        sum_end = Amount('0,00')
 
         # get variables from transaction list
         for x in sorted(self.transactions, key=lambda y: y.buy_date):
