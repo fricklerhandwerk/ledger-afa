@@ -15,12 +15,14 @@ business). Example:
 """
 
 import argparse
-import datetime
+
 import ledger
 import re
 import tabulate
 
+from datetime import date
 from ledger import Amount
+
 
 # afa relevant account, month and day, decimal seperator
 AFA_ACCOUNT = 'AfA'
@@ -68,14 +70,14 @@ class SingleAfaTransaction(object):
         transaction,
         account_name,
         journal,
-        year=datetime.datetime.now().year
+        year=date.today().year
     ):
         """Initialize the class object."""
         self.transaction = transaction
         self.account = self.calculate_account(account_name)
         self.id = gen_id(transaction, account_name)
 
-        self.buy_date = datetime.datetime.now()
+        self.buy_date = date.today()
         self.calculate_date(journal)
 
         self.total_costs = Amount(0)
@@ -92,7 +94,7 @@ class SingleAfaTransaction(object):
         """
         # get total costs (buy date amount)
         query = '-l "a>0" -p "{}" "{}" and "#{}"'.format(
-            self.buy_date.strftime('%Y-%m-%d'),
+            self.buy_date.isoformat(),
             self.account,
             self.transaction.code
         )
@@ -141,8 +143,7 @@ class SingleAfaTransaction(object):
         """Return a string of the object."""
         return '{} ({}={})'.format(
             self.transaction.payee,
-            self.date_this_year.strftime('%Y-%m-%d'),
-            self.buy_date.strftime('%Y-%m-%d')
+            self.buy_date.isoformat()
         )
 
 
@@ -164,7 +165,7 @@ class AfaTransactions(object):
         for trans in transactions:
             # get transactions done this year (aux date of afa trans!)
             # and those who HAVE a code
-            this_year = datetime.date(self.year, MONTH, DAY)
+            this_year = date(self.year, MONTH, DAY)
             if trans.date == this_year and trans.code:
                 for post in trans.posts():
                     name = post.account.fullname()
@@ -240,7 +241,7 @@ class AfaTransactions(object):
         # get variables from transaction list
         for x in sorted(self.transactions, key=lambda y: y.buy_date):
             table.extend(self.add_table_entry(
-                str(x.buy_date.strftime('%Y-%m-%d')),
+                x.buy_date.isoformat(),
                 x.transaction.code,
                 x.transaction.payee,
                 str(x.account),
@@ -281,7 +282,7 @@ def main():
         '-y',
         '--year',
         type=int,
-        default=datetime.datetime.now().year,
+        default=date.today().year,
         help='year for calculation'
     )
     ap.add_argument(
