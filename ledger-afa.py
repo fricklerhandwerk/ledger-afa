@@ -17,10 +17,10 @@ business). Example:
 import argparse
 import datetime
 import ledger
-import ledgerparse
 import re
 import tabulate
 
+from ledger import Amount
 
 # afa relevant account, month and day, decimal seperator
 AFA_ACCOUNT = 'AfA'
@@ -43,13 +43,6 @@ UNDERLINE = '\033[4m'
 E = '\033[0m'
 
 
-# functions
-
-def gen_id(transaction, account_name):
-    """Generate an ID with the given transaction and account_name."""
-    return transaction.code + '-' + transaction.payee + '-' + account_name
-
-
 class LedgerClass(object):
     """Holds the ledger journal and can query it."""
 
@@ -57,15 +50,9 @@ class LedgerClass(object):
         """First parameter has to be a ledger journal."""
         self.journal = journal
 
-    def query_to_string(self, query):
-        """Output a string with a given query for ledger."""
-        out = ledger.Balance()
-        for post in self.journal.query(query):
-            out += post.amount
-        try:
-            return str(out.to_amount().to_double()).replace('.', DEC_SEP)
-        except Exception:
-            return 0.0
+    def query_total(self, query):
+        """Compute total of queried posts"""
+        return sum(post.amount for post in self.journal.query(query))
 
 
 class SingleAfaTransaction(object):
@@ -75,29 +62,28 @@ class SingleAfaTransaction(object):
         self,
         transaction,
         account_name,
-        ledger,
-        ledger_query,
+        journal,
         year=datetime.datetime.now().year
     ):
         """Initialize the class object."""
         self.transaction = transaction
-        self.account = self.calculate_account(ledger, account_name)
-        self.id = gen_id(transaction, account_name)
+        self.account = self.calculate_account(account_name)
+        self.id = transaction.id
 
         self.buy_date = datetime.datetime.now()
-        self.calculate_date(ledger)
+        self.calculate_date(journal)
 
-        self.total_costs = ledgerparse.Money(real_amount=0)
-        self.costs_begin = ledgerparse.Money(real_amount=0)
-        self.costs_end = ledgerparse.Money(real_amount=0)
-        self.calculate_costs(ledger, ledger_query, year)
+        self.total_costs = Amount(0)
+        self.costs_begin = Amount(0)
+        self.costs_end = Amount(0)
+        self.calculate_costs(journal, year)
 
-    def calculate_costs(self, led, ledq, year):
+    def calculate_costs(self, journal, year):
         """
         Calculate the costs for the transaction.
 
         Get the total costs, costs at the end of the last year
-        and the costs at the end of the actual year.
+        and the costs at the end of the current year.
         """
         # get total costs (buy date amount)
         query = '-l "a>0" -p "{}" "{}" and "#{}"'.format(
@@ -105,7 +91,7 @@ class SingleAfaTransaction(object):
             self.account,
             self.transaction.code
         )
-        self.total_costs = ledgerparse.Money(ledq.query_to_string(query))
+        self.total_costs = journal.query_total(query)
 
         # get costs_begin = amount for that account last year
         query = '-p "to {}-{}-{}" "{}" and "#{}"'.format(
@@ -115,7 +101,7 @@ class SingleAfaTransaction(object):
             self.account,
             self.transaction.code
         )
-        self.costs_begin = ledgerparse.Money(ledq.query_to_string(query))
+        self.costs_begin = journal.query_total(query)
 
         # get costs_end = at end of the given year
         query = '-p "to {}" "{}" and "#{}"'.format(
@@ -123,26 +109,24 @@ class SingleAfaTransaction(object):
             self.account,
             self.transaction.code
         )
-        self.costs_end = ledgerparse.Money(ledq.query_to_string(query))
+        self.costs_end = journal.query_total(query)
 
-    def calculate_date(self, ledger_journal):
+    def calculate_date(self, journal):
         """Find buy date."""
         # FIXME: Find the minimum date for the transaction with the same
         #        transaction code. This is probably not very robust.
-        self.buy_date = min(
-            t.aux_date for t in ledger_journal
-            if t.code == self.transaction.code
-        )
+        transactions = journal.journal.xacts()
+        self.buy_date = min(t.date for t in transactions
+                            if t.code == self.transaction.code)
 
-    def calculate_account(self, led, otherwise):
+    def calculate_account(self, default):
         """Get the account name of the inventory account."""
-        # check which account of the transactions is < 0
-        for y, acc in enumerate(self.transaction.accounts):
-            if self.transaction.balance_account(y) < ledgerparse.Money('0'):
-                return self.transaction.accounts[y].name
+        # the inventory account is distinguished by negative balance
+        for post in self.transaction.posts():
+            if post.amount < 0:
+                return post.account.fullname()
 
-        # change nothing otherwise
-        return otherwise
+        return default
 
     def costs_diff(self):
         """Calculate the difference between costs_beginn and costs_end."""
@@ -160,10 +144,9 @@ class SingleAfaTransaction(object):
 class AfaTransactions(object):
     """Holds all AfaTransaction-Objects."""
 
-    def __init__(self, ledgerparse, ledgerclass, account, year):
+    def __init__(self, journal, account, year):
         """Initialize the class."""
-        self.ledgerparse = ledgerparse
-        self.ledgerclass = ledgerclass
+        self.journal = journal
         self.account = account
         self.year = year
         self.transactions = self.get_afa_accounts()
@@ -172,33 +155,27 @@ class AfaTransactions(object):
         """Search all transactions, which are afa compliant."""
         # FIXME: Refactor this to make it readable.
         out = []
-        for trans in self.ledgerparse:
-            # get only transactions done this year (aux date of afa trans!)
-            if trans.aux_date == datetime.datetime(self.year, MONTH, DAY):
-                # ... and those who HAVE a code
-                if len(trans.code) > 0:
-                    # ... and which names have afa account in it
-                    for i, acc in enumerate(trans.accounts):
-                        if re.match(
-                                self.account,
-                                acc.name,
-                                re.IGNORECASE
-                        ):
-                            # ... and only accounts which have amount > 0
-                            # on YEAR-MONTH-DAY
-                            if trans.balance_account(i).amount > 0:
-                                # and only if this does not already exists
-                                if (gen_id(trans, acc.name) not in
-                                        [t.id for t in out]):
-                                    out.append(
-                                        SingleAfaTransaction(
-                                            trans,
-                                            acc.name,
-                                            self.ledgerparse,
-                                            self.ledgerclass,
-                                            self.year
-                                        )
-                                    )
+        transactions = self.journal.journal.xacts()
+        for trans in transactions:
+            # get transactions done this year (aux date of afa trans!)
+            # and those who HAVE a code
+            this_year = datetime.date(self.year, MONTH, DAY)
+            if trans.date == this_year and trans.code:
+                for post in trans.posts():
+                    name = post.account.fullname()
+
+                    matches = re.match(self.account, name, re.IGNORECASE)
+                    amount_positive = post.amount > 0
+                    exists = (trans.id in [t.id for t in out])
+
+                    if matches and amount_positive and not exists:
+                        tx = SingleAfaTransaction(
+                            trans,
+                            name,
+                            self.journal,
+                            self.year,
+                        )
+                        out.append(tx)
         return out
 
     def add_table_entry(
@@ -250,10 +227,10 @@ class AfaTransactions(object):
         table = [header]
 
         # init the variables for the output
-        sum_costs = ledgerparse.Money('0')
-        sum_begin = ledgerparse.Money('0')
-        sum_diff = ledgerparse.Money('0')
-        sum_end = ledgerparse.Money('0')
+        sum_costs = Amount(0)
+        sum_begin = Amount(0)
+        sum_diff = Amount(0)
+        sum_end = Amount(0)
 
         # get variables from transaction list
         for x in sorted(self.transactions, key=lambda y: y.buy_date):
@@ -311,18 +288,9 @@ def main():
 
     ARGUMENTS = ap.parse_args()
 
-    # get ledger journal into the afa transactions class
-    AFA = AfaTransactions(
-        ledgerparse.string_to_ledger(
-            ledgerparse.ledger_file_to_string(ARGUMENTS.file),
-            True
-        ),
-        LedgerClass(
-            ledger.read_journal(ARGUMENTS.file)
-        ),
-        ARGUMENTS.account,
-        ARGUMENTS.year,
-    )
+    journal = LedgerClass(ledger.read_journal(ARGUMENTS.file))
+
+    AFA = AfaTransactions(journal, ARGUMENTS.account, ARGUMENTS.year)
 
     # get spicy output, baby!
     AFA.output()
