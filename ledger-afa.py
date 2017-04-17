@@ -149,12 +149,33 @@ class AfaTransactions(object):
         self.account_name = account
         self.actual_journal = journal.journal
         self.posts = self.get_afa_posts()
+        self.inventory = self.get_inventory_accounts()
 
     def get_afa_posts(self):
         """get all postings that go to afa accounts"""
         top = self.actual_journal.find_account(self.account_name)
         accounts = [top] + get_sub_accounts(top)
+
         return [p for a in accounts for p in a.posts()]
+
+    def get_inventory_accounts(self):
+        """get accounts for inventory items which are deprecated"""
+        # FIXME: This should be a set operation, but that would mean
+        #        to inject a different hash method into `ledger.Account`.
+        inventory = []
+        for post in self.posts:
+            current_account = post.account.fullname()
+            # other accounts from the parent transaction of this posting
+            other_accounts = [p.account for p in post.xact.posts()
+                              if p.account.fullname() != current_account]
+
+            inventory_accounts = [i.fullname() for i in inventory]
+            new_accounts = [a for a in other_accounts
+                            if a.fullname() not in inventory_accounts]
+
+            inventory.extend(new_accounts)
+
+        return inventory
 
     def get_afa_accounts(self):
         """Search all transactions, which are afa compliant."""
