@@ -146,24 +146,35 @@ class AfaTransactions(object):
         self.year = year
         self.transactions = self.get_afa_accounts()
 
-        self.account_name = account
         self.actual_journal = journal.journal
-        self.posts = self.get_afa_posts()
-        self.inventory = self.get_inventory_accounts()
+        self.posts = self.get_afa_posts(account, year)
+        self.inventory = self.get_inventory_accounts(self.posts)
 
-    def get_afa_posts(self):
-        """get all postings that go to afa accounts"""
-        top = self.actual_journal.find_account(self.account_name)
+    def get_afa_posts(self, account_name, year):
+        """
+        get all postings that went to afa accounts this year.
+
+        this way we can trace back inventory items which are currently in
+        deprecation.
+        """
+        top = self.actual_journal.find_account(account_name)
         accounts = [top] + get_sub_accounts(top)
 
-        return [p for a in accounts for p in a.posts()]
+        return [p for a in accounts for p in a.posts()
+                if p.date.year == year]
 
-    def get_inventory_accounts(self):
-        """get accounts for inventory items which are deprecated"""
+    def get_inventory_accounts(self, posts):
+        """
+        get accounts for inventory items which are deprecated.
+
+        this is done looking at each deprecation post and taking all
+        other accounts in the transaction of that post, removing duplicates.
+        """
+
         # FIXME: This should be a set operation, but that would mean
         #        to inject a different hash method into `ledger.Account`.
         inventory = []
-        for post in self.posts:
+        for post in posts:
             current_account = post.account.fullname()
             # other accounts from the parent transaction of this posting
             other_accounts = [p.account for p in post.xact.posts()
