@@ -168,7 +168,7 @@ class AfaTransactions(object):
 
                     matches = re.match(self.account, name, re.IGNORECASE)
                     amount_positive = post.amount > 0
-                    exists = (trans.id in [t.transaction.id for t in out])
+                    exists = (trans.code + trans.payee in [t.transaction.code + t.transaction.payee for t in out])
 
                     if matches and amount_positive and not exists:
                         tx = SingleAfaTransaction(
