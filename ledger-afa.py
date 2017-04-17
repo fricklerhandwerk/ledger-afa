@@ -31,6 +31,12 @@ MONTH = 12
 DAY = 31
 
 
+def get_sub_accounts(account):
+    top = [a for a in account.accounts()]
+    sub = [a for acc in account.accounts() for a in get_sub_accounts(acc)]
+    return top + sub
+
+
 class LedgerClass(object):
     """Holds the ledger journal and can query it."""
 
@@ -139,6 +145,16 @@ class AfaTransactions(object):
         self.account = account
         self.year = year
         self.transactions = self.get_afa_accounts()
+
+        self.account_name = account
+        self.actual_journal = journal.journal
+        self.posts = self.get_afa_posts()
+
+    def get_afa_posts(self):
+        """get all postings that go to afa accounts"""
+        top = self.actual_journal.find_account(self.account_name)
+        accounts = [top] + get_sub_accounts(top)
+        return [p for a in accounts for p in a.posts()]
 
     def get_afa_accounts(self):
         """Search all transactions, which are afa compliant."""
