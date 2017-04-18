@@ -17,16 +17,10 @@ business). Example:
 import argparse
 import colorama
 import ledger
-import re
 import tabulate
 
 from datetime import date
 from termcolor import colored
-
-
-AFA_ACCOUNT = 'AfA'
-MONTH = 12
-DAY = 31
 
 
 def get_sub_accounts(account):
@@ -141,105 +135,6 @@ def create_table(items):
     return table
 
 
-class LedgerClass(object):
-    """Holds the ledger journal and can query it."""
-
-    def __init__(self, journal):
-        """First parameter has to be a ledger journal."""
-        self.journal = journal
-
-    def query_total(self, query):
-        """Compute total of queried posts"""
-        return sum(post.amount for post in self.journal.query(query))
-
-
-class SingleAfaTransaction(object):
-    """A single tax reducing afa transaction."""
-
-    def __init__(
-        self,
-        transaction,
-        account_name,
-        journal,
-        year=date.today().year
-    ):
-        """Initialize the class object."""
-        self.transaction = transaction
-        self.account = self.calculate_account(account_name)
-
-        self.buy_date = date.today()
-        self.calculate_date(journal)
-
-        self.total_costs = ledger.Amount(0)
-        self.last_year_value = ledger.Amount(0)
-        self.next_year_value = ledger.Amount(0)
-        self.calculate_costs(journal, year)
-
-    def calculate_costs(self, journal, year):
-        """
-        Calculate the costs for the transaction.
-
-        Get the total costs, costs at the end of the last year
-        and the costs at the end of the current year.
-        """
-        # get total costs (buy date amount)
-        query = '-l "a>0" -p "{}" "{}" and "#{}" and @"{}"'.format(
-            self.buy_date.isoformat(),
-            self.account,
-            self.transaction.code,
-            self.transaction.payee,
-        )
-        self.total_costs = journal.query_total(query)
-
-        # get last_year_value = amount for that account last year
-        query = '-p "to {}-{}-{}" "{}" and "#{}" and @"{}"'.format(
-            str(year),
-            str(MONTH),
-            str(DAY),
-            self.account,
-            self.transaction.code,
-            self.transaction.payee,
-        )
-        self.last_year_value = journal.query_total(query)
-
-        # get next_year_value = at end of the given year
-        query = '-p "to {}" "{}" and "#{}" and @"{}"'.format(
-            str(year + 1),
-            self.account,
-            self.transaction.code,
-            self.transaction.payee,
-        )
-        self.next_year_value = journal.query_total(query)
-
-    def calculate_date(self, journal):
-        """Find buy date."""
-        # FIXME: Find the minimum date for the transaction with the same
-        #        transaction code. This is probably not very robust.
-        transactions = journal.journal.xacts()
-        self.buy_date = min(t.date for t in transactions
-                            if t.code == self.transaction.code)
-
-    def calculate_account(self, default):
-        """Get the account name of the inventory account."""
-        # the inventory account is distinguished by negative balance
-        for post in self.transaction.posts():
-            if post.amount < 0:
-                return post.account.fullname()
-
-        return default
-
-    def deprecation_amount(self):
-        """Calculate the difference between last_year_valuen and next_year_value."""
-        return self.last_year_value - self.next_year_value
-
-    def __str__(self):
-        """Return a string of the object."""
-        return '{} ({}={})'.format(
-            self.transaction.payee,
-            self.buy_date.isoformat()
-        )
-
-
 class InventoryItem(object):
     def __init__(self, account, year):
         self.item = account.name
@@ -259,49 +154,6 @@ class InventoryItem(object):
                                       if p.date.year == year)
 
 
-class AfaTransactions(object):
-    """Holds all AfaTransaction-Objects."""
-
-    def __init__(self, journal, account, year):
-        """Initialize the class."""
-        self.journal = journal
-        self.account = account
-        self.year = year
-        self.transactions = self.get_afa_accounts()
-
-        self.actual_journal = journal.journal
-        self.posts = self.get_afa_posts(account, year)
-        self.inventory = self.get_inventory_accounts(self.posts)
-        self.items = [InventoryItem(i, self.year) for i in self.inventory]
-
-    def get_afa_accounts(self):
-        """Search all transactions, which are afa compliant."""
-        # FIXME: Refactor this to make it readable.
-        out = []
-        transactions = self.journal.journal.xacts()
-        for trans in transactions:
-            # get transactions done this year (aux date of afa trans!)
-            # and those who HAVE a code
-            this_year = date(self.year, MONTH, DAY)
-            if trans.date == this_year and trans.code:
-                for post in trans.posts():
-                    name = post.account.fullname()
-
-                    matches = re.match(self.account, name, re.IGNORECASE)
-                    amount_positive = post.amount > 0
-                    exists = trans.code + trans.payee in [t.transaction.code + t.transaction.payee for t in out]
-
-                    if matches and amount_positive and not exists:
-                        tx = SingleAfaTransaction(
-                            trans,
-                            name,
-                            self.journal,
-                            self.year,
-                        )
-                        out.append(tx)
-        return out
-
-
 def main():
     args = argparse.ArgumentParser(
         description=('A program for calculating and displaying tax deprecation '
@@ -309,7 +161,7 @@ def main():
     )
     args.add_argument(
         'file',
-        help='a ledger journal'
+        help='ledger journal'
     )
     args.add_argument(
         '-y',
@@ -321,8 +173,8 @@ def main():
     args.add_argument(
         '-a',
         '--account',
-        default=AFA_ACCOUNT,
-        help='afa account'
+        default='AfA',
+        help='account for deprecation'
     )
 
     args = args.parse_args()
