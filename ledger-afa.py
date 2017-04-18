@@ -233,43 +233,35 @@ class AfaTransactions(object):
         date='',
         code='',
         item='',
-        account='',
         costs='',
         costs_begin='',
         costs_diff='',
         costs_end=''
     ):
         """Output two tabulate compliant table lines."""
-        line_a = [
-            unicode(date, 'utf-8'),
-            colored(unicode(code, 'utf-8'), 'yellow'),
-            colored(unicode(item, 'utf-8'), attrs=['bold']),
-            colored(unicode(costs, 'utf-8'), 'red'),
-            unicode(costs_begin, 'utf-8'),
-            colored(unicode(costs_diff, 'utf-8'), 'cyan'),
-            unicode(costs_end, 'utf-8'),
+        return [
+            date,
+            colored(code, 'yellow'),
+            item,
+            colored(str(costs), 'red'),
+            str(costs_begin),
+            colored(str(costs_diff), 'cyan'),
+            str(costs_end),
         ]
-        line_b = [
-            '',
-            '',
-            colored(unicode('   ' + account, 'utf-8'), 'magenta'),
-            '',
-            '',
-            '',
-            '',
-        ]
-        return [line_a, line_b]
 
     def output(self):
         """Print the afa transactions on the output."""
         # init the header for the table
         def color_header(s):
-            return colored(s, 'blue', attrs=['underline', 'bold'])
+            return colored(s, attrs=['bold'])
+
+        def color_footer(s):
+            return colored(s, attrs=['bold'])
 
         header = [
             'Kaufdatum',
-            'Beleg-Nr.',
-            unicode('Gerät + Konto', 'utf-8'),
+            'Beleg.',
+            'Gerät',
             'Kaufpreis',
             'Buchwert Anfang',
             'Buchwert Diff',
@@ -280,36 +272,35 @@ class AfaTransactions(object):
         table = [map(color_header, header)]
 
         # init the variables for the output
-        sum_costs = ledger.Amount('0,00')
-        sum_begin = ledger.Amount('0,00')
-        sum_diff = ledger.Amount('0,00')
-        sum_end = ledger.Amount('0,00')
+        sum_costs = sum(i.initial_value for i in self.items)
+        sum_begin = sum(i.last_year_value for i in self.items)
+        sum_diff = sum(i.deprecation_amount for i in self.items)
+        sum_end = sum(i.next_year_value for i in self.items)
 
         # get variables from transaction list
-        for x in sorted(self.transactions, key=lambda y: y.buy_date):
-            table.extend(self.add_table_entry(
+        for x in sorted(self.items, key=lambda y: y.buy_date):
+            table.append(self.add_table_entry(
                 x.buy_date.isoformat(),
-                x.transaction.code,
-                x.transaction.payee,
-                str(x.account),
-                str(x.total_costs),
-                str(x.costs_begin),
-                str(x.costs_diff()),
-                str(x.costs_end))
+                x.code,
+                x.item,
+                x.initial_value,
+                x.last_year_value,
+                x.deprecation_amount,
+                x.next_year_value,
+                )
             )
-            sum_costs += x.total_costs
-            sum_begin += x.costs_begin
-            sum_diff += x.costs_diff()
-            sum_end += x.costs_end
 
-        table.extend(self.add_table_entry())
-        table.extend(self.add_table_entry(
-            item='Summen:',
-            costs=str(sum_costs),
-            costs_begin=str(sum_begin),
-            costs_diff=str(sum_diff),
-            costs_end=str(sum_end))
+        footer = self.add_table_entry(
+            item='Gesamt',
+            costs=sum_costs,
+            costs_begin=sum_begin,
+            costs_diff=sum_diff,
+            costs_end=sum_end,
         )
+
+        table.append(map(color_footer, footer))
+
+        table = [map(lambda s: s.decode('utf-8'), row) for row in table]
 
         print(tabulate.tabulate(table, tablefmt='plain'))
 
