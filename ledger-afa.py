@@ -136,6 +136,25 @@ class SingleAfaTransaction(object):
         )
 
 
+class InventoryItem(object):
+    def __init__(self, account, year):
+        self.item = account.name
+        self.account = account.fullname()
+        self.year = year
+
+        first_post = account.posts().next()
+        self.code = first_post.xact.code
+        self.buy_date = first_post.date
+        self.initial_value = first_post.amount
+
+        self.last_year_value = sum(p.amount for p in account.posts()
+                                   if p.date.year < year)
+        self.next_year_value = sum(p.amount for p in account.posts()
+                                   if p.date.year <= year)
+        self.deprecation_amount = sum(p.amount for p in account.posts()
+                                      if p.date.year == year)
+
+
 class AfaTransactions(object):
     """Holds all AfaTransaction-Objects."""
 
@@ -149,6 +168,7 @@ class AfaTransactions(object):
         self.actual_journal = journal.journal
         self.posts = self.get_afa_posts(account, year)
         self.inventory = self.get_inventory_accounts(self.posts)
+        self.items = [InventoryItem(i, self.year) for i in self.inventory]
 
     def get_afa_posts(self, account_name, year):
         """
