@@ -72,19 +72,19 @@ def table_entry(
     date='',
     code='',
     item='',
-    costs='',
-    costs_begin='',
-    costs_diff='',
-    costs_end=''
+    initial_value='',
+    last_year_value='',
+    deprecation_amount='',
+    next_year_value=''
 ):
     return [
         date,
         colored(code, 'yellow'),
         item,
-        colored(str(costs), 'red'),
-        str(costs_begin),
-        colored(str(costs_diff), 'cyan'),
-        str(costs_end),
+        colored(str(initial_value), 'red'),
+        str(last_year_value),
+        colored(str(deprecation_amount), 'cyan'),
+        str(next_year_value),
     ]
 
 
@@ -109,10 +109,10 @@ def create_table(items):
 
     table = [map(color_header, header)]
 
-    sum_costs = sum(i.initial_value for i in items)
-    sum_begin = sum(i.last_year_value for i in items)
-    sum_diff = sum(i.deprecation_amount for i in items)
-    sum_end = sum(i.next_year_value for i in items)
+    sum_initial_value = sum(i.initial_value for i in items)
+    sum_last_year_value = sum(i.last_year_value for i in items)
+    sum_deprecation_amount = sum(i.deprecation_amount for i in items)
+    sum_next_year_value = sum(i.next_year_value for i in items)
 
     for x in sorted(items, key=lambda y: y.buy_date):
         line = table_entry(
@@ -128,10 +128,10 @@ def create_table(items):
 
     footer = table_entry(
         item='Gesamt',
-        costs=sum_costs,
-        costs_begin=sum_begin,
-        costs_diff=sum_diff,
-        costs_end=sum_end,
+        initial_value=sum_initial_value,
+        last_year_value=sum_last_year_value,
+        deprecation_amount=sum_deprecation_amount,
+        next_year_value=sum_next_year_value,
     )
 
     table.append(map(color_footer, footer))
@@ -171,8 +171,8 @@ class SingleAfaTransaction(object):
         self.calculate_date(journal)
 
         self.total_costs = ledger.Amount(0)
-        self.costs_begin = ledger.Amount(0)
-        self.costs_end = ledger.Amount(0)
+        self.last_year_value = ledger.Amount(0)
+        self.next_year_value = ledger.Amount(0)
         self.calculate_costs(journal, year)
 
     def calculate_costs(self, journal, year):
@@ -191,7 +191,7 @@ class SingleAfaTransaction(object):
         )
         self.total_costs = journal.query_total(query)
 
-        # get costs_begin = amount for that account last year
+        # get last_year_value = amount for that account last year
         query = '-p "to {}-{}-{}" "{}" and "#{}" and @"{}"'.format(
             str(year),
             str(MONTH),
@@ -200,16 +200,16 @@ class SingleAfaTransaction(object):
             self.transaction.code,
             self.transaction.payee,
         )
-        self.costs_begin = journal.query_total(query)
+        self.last_year_value = journal.query_total(query)
 
-        # get costs_end = at end of the given year
+        # get next_year_value = at end of the given year
         query = '-p "to {}" "{}" and "#{}" and @"{}"'.format(
             str(year + 1),
             self.account,
             self.transaction.code,
             self.transaction.payee,
         )
-        self.costs_end = journal.query_total(query)
+        self.next_year_value = journal.query_total(query)
 
     def calculate_date(self, journal):
         """Find buy date."""
@@ -228,9 +228,9 @@ class SingleAfaTransaction(object):
 
         return default
 
-    def costs_diff(self):
-        """Calculate the difference between costs_beginn and costs_end."""
-        return self.costs_begin - self.costs_end
+    def deprecation_amount(self):
+        """Calculate the difference between last_year_valuen and next_year_value."""
+        return self.last_year_value - self.next_year_value
 
     def __str__(self):
         """Return a string of the object."""
