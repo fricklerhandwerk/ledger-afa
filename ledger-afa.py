@@ -22,7 +22,6 @@ import tabulate
 
 from colorama import init
 from datetime import date
-from ledger import Amount
 from termcolor import colored
 
 
@@ -66,9 +65,9 @@ class SingleAfaTransaction(object):
         self.buy_date = date.today()
         self.calculate_date(journal)
 
-        self.total_costs = Amount(0)
-        self.costs_begin = Amount(0)
-        self.costs_end = Amount(0)
+        self.total_costs = ledger.Amount(0)
+        self.costs_begin = ledger.Amount(0)
+        self.costs_end = ledger.Amount(0)
         self.calculate_costs(journal, year)
 
     def calculate_costs(self, journal, year):
@@ -188,23 +187,17 @@ class AfaTransactions(object):
         get accounts for inventory items which are deprecated.
 
         this is done looking at each deprecation post and taking all
-        other accounts in the transaction of that post, removing duplicates.
+        other accounts in the transaction of that post.
         """
 
-        # FIXME: This should be a set operation, but that would mean
-        #        to inject a different hash method into `ledger.Account`.
-        inventory = []
+        # monkey patch so we can use `Account` in `set`
+        ledger.Account.__hash__ = lambda self: hash(self.fullname())
+
+        inventory = set()
         for post in posts:
-            current_account = post.account.fullname()
             # other accounts from the parent transaction of this posting
-            other_accounts = [p.account for p in post.xact.posts()
-                              if p.account.fullname() != current_account]
-
-            inventory_accounts = [i.fullname() for i in inventory]
-            new_accounts = [a for a in other_accounts
-                            if a.fullname() not in inventory_accounts]
-
-            inventory.extend(new_accounts)
+            inventory |= set(p.account for p in post.xact.posts()
+                             if p.account.fullname() != post.account.fullname())
 
         return inventory
 
@@ -287,10 +280,10 @@ class AfaTransactions(object):
         table = [map(color_header, header)]
 
         # init the variables for the output
-        sum_costs = Amount('0,00')
-        sum_begin = Amount('0,00')
-        sum_diff = Amount('0,00')
-        sum_end = Amount('0,00')
+        sum_costs = ledger.Amount('0,00')
+        sum_begin = ledger.Amount('0,00')
+        sum_diff = ledger.Amount('0,00')
+        sum_end = ledger.Amount('0,00')
 
         # get variables from transaction list
         for x in sorted(self.transactions, key=lambda y: y.buy_date):
