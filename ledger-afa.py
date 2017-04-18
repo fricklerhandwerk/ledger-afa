@@ -15,12 +15,11 @@ business). Example:
 """
 
 import argparse
-
+import colorama
 import ledger
 import re
 import tabulate
 
-from colorama import init
 from datetime import date
 from termcolor import colored
 
@@ -34,6 +33,112 @@ def get_sub_accounts(account):
     top = [a for a in account.accounts()]
     sub = [a for acc in account.accounts() for a in get_sub_accounts(acc)]
     return top + sub
+
+
+def get_afa_posts(journal, account, year):
+    """
+    get all postings that went to afa accounts this year.
+
+    this way we can trace back inventory items which are being deprecated.
+    """
+    top = journal.find_account(account)
+    accounts = [top] + get_sub_accounts(top)
+
+    return [p for a in accounts for p in a.posts()
+            if p.date.year == year]
+
+
+def get_inventory(posts):
+    """
+    get accounts for inventory items which are being deprecated.
+
+    this is done looking at each deprecation post and taking all
+    other accounts in the transaction of that post.
+    """
+
+    # monkey patch so we can use `Account` in `set`
+    ledger.Account.__hash__ = lambda self: hash(self.fullname())
+
+    inventory = set()
+    for post in posts:
+        # other accounts from the parent transaction of this posting
+        inventory |= set(p.account for p in post.xact.posts()
+                         if p.account.fullname() != post.account.fullname())
+
+    return inventory
+
+
+def table_entry(
+    date='',
+    code='',
+    item='',
+    costs='',
+    costs_begin='',
+    costs_diff='',
+    costs_end=''
+):
+    return [
+        date,
+        colored(code, 'yellow'),
+        item,
+        colored(str(costs), 'red'),
+        str(costs_begin),
+        colored(str(costs_diff), 'cyan'),
+        str(costs_end),
+    ]
+
+
+def create_table(items):
+    colorama.init()  # needed only for windows terminal color support
+
+    def color_header(s):
+        return colored(s, attrs=['bold'])
+
+    def color_footer(s):
+        return colored(s, attrs=['bold'])
+
+    header = [
+        'Kaufdatum',
+        'Beleg',
+        'Gerät',
+        'Kaufpreis',
+        'Buchwert Anfang',
+        'Abschreibung',
+        'Buchwert Ende',
+    ]
+
+    table = [map(color_header, header)]
+
+    sum_costs = sum(i.initial_value for i in items)
+    sum_begin = sum(i.last_year_value for i in items)
+    sum_diff = sum(i.deprecation_amount for i in items)
+    sum_end = sum(i.next_year_value for i in items)
+
+    for x in sorted(items, key=lambda y: y.buy_date):
+        line = table_entry(
+            x.buy_date.isoformat(),
+            x.code,
+            x.item,
+            x.initial_value,
+            x.last_year_value,
+            x.deprecation_amount,
+            x.next_year_value,
+        )
+        table.append(line)
+
+    footer = table_entry(
+        item='Gesamt',
+        costs=sum_costs,
+        costs_begin=sum_begin,
+        costs_diff=sum_diff,
+        costs_end=sum_end,
+    )
+
+    table.append(map(color_footer, footer))
+
+    table = [map(lambda s: s.decode('utf-8'), row) for row in table]
+
+    return table
 
 
 class LedgerClass(object):
@@ -169,38 +274,6 @@ class AfaTransactions(object):
         self.inventory = self.get_inventory_accounts(self.posts)
         self.items = [InventoryItem(i, self.year) for i in self.inventory]
 
-    def get_afa_posts(self, account_name, year):
-        """
-        get all postings that went to afa accounts this year.
-
-        this way we can trace back inventory items which are currently in
-        deprecation.
-        """
-        top = self.actual_journal.find_account(account_name)
-        accounts = [top] + get_sub_accounts(top)
-
-        return [p for a in accounts for p in a.posts()
-                if p.date.year == year]
-
-    def get_inventory_accounts(self, posts):
-        """
-        get accounts for inventory items which are deprecated.
-
-        this is done looking at each deprecation post and taking all
-        other accounts in the transaction of that post.
-        """
-
-        # monkey patch so we can use `Account` in `set`
-        ledger.Account.__hash__ = lambda self: hash(self.fullname())
-
-        inventory = set()
-        for post in posts:
-            # other accounts from the parent transaction of this posting
-            inventory |= set(p.account for p in post.xact.posts()
-                             if p.account.fullname() != post.account.fullname())
-
-        return inventory
-
     def get_afa_accounts(self):
         """Search all transactions, which are afa compliant."""
         # FIXME: Refactor this to make it readable.
@@ -228,117 +301,38 @@ class AfaTransactions(object):
                         out.append(tx)
         return out
 
-    def add_table_entry(
-        self,
-        date='',
-        code='',
-        item='',
-        costs='',
-        costs_begin='',
-        costs_diff='',
-        costs_end=''
-    ):
-        """Output two tabulate compliant table lines."""
-        return [
-            date,
-            colored(code, 'yellow'),
-            item,
-            colored(str(costs), 'red'),
-            str(costs_begin),
-            colored(str(costs_diff), 'cyan'),
-            str(costs_end),
-        ]
-
-    def output(self):
-        """Print the afa transactions on the output."""
-        # init the header for the table
-        def color_header(s):
-            return colored(s, attrs=['bold'])
-
-        def color_footer(s):
-            return colored(s, attrs=['bold'])
-
-        header = [
-            'Kaufdatum',
-            'Beleg.',
-            'Gerät',
-            'Kaufpreis',
-            'Buchwert Anfang',
-            'Buchwert Diff',
-            'Buchwert Ende',
-        ]
-
-        # init the table
-        table = [map(color_header, header)]
-
-        # init the variables for the output
-        sum_costs = sum(i.initial_value for i in self.items)
-        sum_begin = sum(i.last_year_value for i in self.items)
-        sum_diff = sum(i.deprecation_amount for i in self.items)
-        sum_end = sum(i.next_year_value for i in self.items)
-
-        # get variables from transaction list
-        for x in sorted(self.items, key=lambda y: y.buy_date):
-            table.append(self.add_table_entry(
-                x.buy_date.isoformat(),
-                x.code,
-                x.item,
-                x.initial_value,
-                x.last_year_value,
-                x.deprecation_amount,
-                x.next_year_value,
-                )
-            )
-
-        footer = self.add_table_entry(
-            item='Gesamt',
-            costs=sum_costs,
-            costs_begin=sum_begin,
-            costs_diff=sum_diff,
-            costs_end=sum_end,
-        )
-
-        table.append(map(color_footer, footer))
-
-        table = [map(lambda s: s.decode('utf-8'), row) for row in table]
-
-        print(tabulate.tabulate(table, tablefmt='plain'))
-
 
 def main():
-    # set up the arguments
-    ap = argparse.ArgumentParser(
-        description='Programm for calculating and summing up tax reduction'
-        ' inventory purchases.'
+    args = argparse.ArgumentParser(
+        description=('A program for calculating and displaying tax deprecation '
+                     'on specified items in a ledger journal.')
     )
-
-    ap.add_argument(
+    args.add_argument(
         'file',
         help='a ledger journal'
     )
-    ap.add_argument(
+    args.add_argument(
         '-y',
         '--year',
         type=int,
         default=date.today().year,
         help='year for calculation'
     )
-    ap.add_argument(
+    args.add_argument(
         '-a',
         '--account',
         default=AFA_ACCOUNT,
         help='afa account'
     )
 
-    ARGUMENTS = ap.parse_args()
+    args = args.parse_args()
 
-    journal = LedgerClass(ledger.read_journal(ARGUMENTS.file))
+    journal = ledger.read_journal(args.file)
+    posts = get_afa_posts(journal, args.account, args.year)
+    inventory = [InventoryItem(i, args.year) for i in get_inventory(posts)]
+    table = create_table(inventory)
 
-    AFA = AfaTransactions(journal, ARGUMENTS.account, ARGUMENTS.year)
-
-    # get spicy output, baby!
-    init()
-    AFA.output()
+    print(tabulate.tabulate(table, tablefmt='plain'))
 
 if __name__ == '__main__':
     main()
