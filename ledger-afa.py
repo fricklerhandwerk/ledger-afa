@@ -82,7 +82,7 @@ def table_entry(
     ]
 
 
-def create_table(items):
+def create_table(items, year):
     colorama.init()  # needed only for windows terminal color support
 
     def color_header(s):
@@ -96,9 +96,9 @@ def create_table(items):
         'Beleg',
         'Gerät',
         'Kaufpreis',
-        'Buchwert Anfang',
+        'Buchwert {}'.format(year - 1),
         'Abschreibung',
-        'Buchwert Ende',
+        'Buchwert {}'.format(year),
     ]
 
     table = [map(color_header, header)]
@@ -151,7 +151,8 @@ class InventoryItem(object):
         self.next_year_value = sum(p.amount for p in account.posts()
                                    if p.date.year <= year)
         self.deprecation_amount = sum(p.amount for p in account.posts()
-                                      if p.date.year == year)
+                                      if p.date.year == year
+                                      and p.id != first_post.id)
 
 
 def main():
@@ -182,7 +183,7 @@ def main():
     journal = ledger.read_journal(args.file)
     posts = get_afa_posts(journal, args.account, args.year)
     inventory = [InventoryItem(i, args.year) for i in get_inventory(posts)]
-    table = create_table(inventory)
+    table = create_table(inventory, args.year)
 
     print(tabulate.tabulate(table, tablefmt='plain'))
 
