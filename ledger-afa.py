@@ -55,6 +55,7 @@ def get_inventory(posts):
 
     # monkey patch so we can use `Account` in `set`
     ledger.Account.__hash__ = lambda self: hash(self.fullname())
+    ledger.Account.__eq__ = lambda self, other: self.fullname() == other.fullname()
 
     inventory = set()
     for post in posts:
