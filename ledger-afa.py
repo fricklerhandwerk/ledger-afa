@@ -35,9 +35,12 @@ def get_afa_posts(journal, account, year):
 
     this way we can trace back inventory items which are being deprecated.
     """
-    top = journal.find_account(account)
-    accounts = [top] + get_sub_accounts(top)
+    top = journal.find_account_re(account)
 
+    if top is None:
+        return
+
+    accounts = [top] + get_sub_accounts(top)
     return [p for a in accounts for p in a.posts()
             if p.date.year == year]
 
@@ -182,6 +185,11 @@ def main():
 
     journal = ledger.read_journal(args.file)
     posts = get_afa_posts(journal, args.account, args.year)
+
+    if posts is None:
+        print("No such account: {}".format(args.account))
+        return
+
     inventory = [InventoryItem(i, args.year) for i in get_inventory(posts)]
     table = create_table(inventory, args.year)
 
