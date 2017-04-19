@@ -1,19 +1,5 @@
 # coding=utf-8
 
-"""
-A program for calculating and displaying tax deprecation on specified items
-in a ledger journal.
-
-This script will only work, if there are only TWO accounts in the afa
-transaction at the end of a ARGUMENTS.year: the one which will apply to the
-tax reduction afa list and the one from which it comes (inventory of the
-business). Example:
-
-2016-12-31 * (a99) New NTG3 microphone
-  afa-tax-reduction:Microphones  $ 100,00
-  inventory:NTG3 microphone
-"""
-
 import argparse
 import colorama
 import ledger
@@ -161,25 +147,25 @@ class InventoryItem(object):
 
 def main():
     args = argparse.ArgumentParser(
-        description=('A program for calculating and displaying tax deprecation '
-                     'on specified items in a ledger journal.')
+        description=('Ein Programm zur Berechnung und Anzeige der Abschreibung '
+                     'für Abnutzung (AfA) auf Grundlage eines ledger Journals.')
     )
     args.add_argument(
         'file',
-        help='ledger journal'
+        help='ledger Journal'
     )
     args.add_argument(
-        '-y',
-        '--year',
+        '-j',
+        '--jahr',
         type=int,
         default=date.today().year,
-        help='year for calculation'
+        help='Jahr der Berechnung'
     )
     args.add_argument(
-        '-a',
-        '--account',
+        '-l',
+        '--konto',
         default='AfA',
-        help='account for deprecation'
+        help='Konto für AfA'
     )
 
     args = args.parse_args()
@@ -188,7 +174,7 @@ def main():
     posts = get_afa_posts(journal, args.account, args.year)
 
     if posts is None:
-        print("No such account: {}".format(args.account))
+        print("Konto nicht gefunden: {}".format(args.account))
         return
 
     inventory = [InventoryItem(i, args.year) for i in get_inventory(posts)]
