@@ -151,12 +151,20 @@ class InventoryItem(object):
         self.initial_value = first_post.amount
 
         self.last_year_value = sum(p.amount for p in account.posts()
-                                   if p.date.year < year)
+                                   if p.date.year < year
+                                   # consider additional purchases in current year
+                                   or (p.date.year == year and p.amount > 0)
+                                   )
+
         self.next_year_value = sum(p.amount for p in account.posts()
                                    if p.date.year <= year)
+
         self.deprecation_amount = sum(p.amount for p in account.posts()
                                       if p.date.year == year
-                                      and p.id != first_post.id)
+                                      and p.id != first_post.id
+                                      # only consider deprecation
+                                      and p.amount < 0
+                                      )
 
 
 def main():
