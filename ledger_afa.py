@@ -1,19 +1,5 @@
 # coding=utf-8
 
-"""
-A program for calculating and displaying tax deprecation on specified items
-in a ledger journal.
-
-This script will only work, if there are only TWO accounts in the afa
-transaction at the end of a ARGUMENTS.year: the one which will apply to the
-tax reduction afa list and the one from which it comes (inventory of the
-business). Example:
-
-2016-12-31 * (a99) New NTG3 microphone
-  afa-tax-reduction:Microphones  $ 100,00
-  inventory:NTG3 microphone
-"""
-
 import argparse
 import colorama
 import ledger
@@ -70,7 +56,7 @@ def table_entry(
     date='',
     code='',
     item='',
-    initial_value='',
+    total_value='',
     last_year_value='',
     deprecation_amount='',
     next_year_value=''
@@ -79,7 +65,7 @@ def table_entry(
         date,
         colored(code, 'yellow'),
         item,
-        colored(str(initial_value), 'red'),
+        colored(str(total_value), 'red'),
         str(last_year_value),
         colored(str(deprecation_amount), 'cyan'),
         str(next_year_value),
@@ -107,7 +93,7 @@ def create_table(items, year):
 
     table = [map(color_header, header)]
 
-    sum_initial_value = sum(i.initial_value for i in items)
+    sum_total_value = sum(i.total_value for i in items)
     sum_last_year_value = sum(i.last_year_value for i in items)
     sum_deprecation_amount = sum(i.deprecation_amount for i in items)
     sum_next_year_value = sum(i.next_year_value for i in items)
@@ -117,7 +103,7 @@ def create_table(items, year):
             x.buy_date.isoformat(),
             x.code,
             x.item,
-            x.initial_value,
+            x.total_value,
             x.last_year_value,
             x.deprecation_amount,
             x.next_year_value,
@@ -126,7 +112,7 @@ def create_table(items, year):
 
     footer = table_entry(
         item='Gesamt',
-        initial_value=sum_initial_value,
+        total_value=sum_total_value,
         last_year_value=sum_last_year_value,
         deprecation_amount=sum_deprecation_amount,
         next_year_value=sum_next_year_value,
@@ -148,7 +134,9 @@ class InventoryItem(object):
         first_post = account.posts().next()
         self.code = first_post.xact.code
         self.buy_date = first_post.date
-        self.initial_value = first_post.amount
+        # instead of only taking initial value, accumulate all purchases
+        self.total_value = sum(p.amount for p in account.posts()
+                               if p.amount > 0 and p.date.year <= year)
 
         self.last_year_value = sum(p.amount for p in account.posts()
                                    if p.date.year < year
@@ -169,25 +157,25 @@ class InventoryItem(object):
 
 def main():
     args = argparse.ArgumentParser(
-        description=('A program for calculating and displaying tax deprecation '
-                     'on specified items in a ledger journal.')
+        description=('Ein Programm zur Berechnung und Anzeige der Abschreibung '
+                     'für Abnutzung (AfA) auf Grundlage eines ledger Journals.')
     )
     args.add_argument(
         'file',
-        help='ledger journal'
+        help='ledger Journal'
     )
     args.add_argument(
-        '-y',
-        '--year',
+        '-j',
+        '--jahr',
         type=int,
         default=date.today().year,
-        help='year for calculation'
+        help='Jahr der Berechnung'
     )
     args.add_argument(
-        '-a',
-        '--account',
+        '-l',
+        '--konto',
         default='AfA',
-        help='account for deprecation'
+        help='Konto für AfA'
     )
 
     args = args.parse_args()
