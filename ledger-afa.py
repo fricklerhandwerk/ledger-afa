@@ -70,7 +70,7 @@ def table_entry(
     date='',
     code='',
     item='',
-    initial_value='',
+    total_value='',
     last_year_value='',
     deprecation_amount='',
     next_year_value=''
@@ -79,7 +79,7 @@ def table_entry(
         date,
         colored(code, 'yellow'),
         item,
-        colored(str(initial_value), 'red'),
+        colored(str(total_value), 'red'),
         str(last_year_value),
         colored(str(deprecation_amount), 'cyan'),
         str(next_year_value),
@@ -107,7 +107,7 @@ def create_table(items, year):
 
     table = [map(color_header, header)]
 
-    sum_initial_value = sum(i.initial_value for i in items)
+    sum_total_value = sum(i.total_value for i in items)
     sum_last_year_value = sum(i.last_year_value for i in items)
     sum_deprecation_amount = sum(i.deprecation_amount for i in items)
     sum_next_year_value = sum(i.next_year_value for i in items)
@@ -117,7 +117,7 @@ def create_table(items, year):
             x.buy_date.isoformat(),
             x.code,
             x.item,
-            x.initial_value,
+            x.total_value,
             x.last_year_value,
             x.deprecation_amount,
             x.next_year_value,
@@ -126,7 +126,7 @@ def create_table(items, year):
 
     footer = table_entry(
         item='Gesamt',
-        initial_value=sum_initial_value,
+        total_value=sum_total_value,
         last_year_value=sum_last_year_value,
         deprecation_amount=sum_deprecation_amount,
         next_year_value=sum_next_year_value,
@@ -148,7 +148,9 @@ class InventoryItem(object):
         first_post = account.posts().next()
         self.code = first_post.xact.code
         self.buy_date = first_post.date
-        self.initial_value = first_post.amount
+        # instead of only taking initial value, accumulate all purchases
+        self.total_value = sum(p.amount for p in account.posts()
+                               if p.amount > 0 and p.date.year <= year)
 
         self.last_year_value = sum(p.amount for p in account.posts()
                                    if p.date.year < year
